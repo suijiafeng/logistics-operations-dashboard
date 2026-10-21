@@ -4,6 +4,9 @@ import { COLORS, FONT } from '../design/tokens'
 import { useChartMotion } from './useChartMotion'
 import { useDashboardStore } from '../stores/dashboard'
 
+const POINTER_EVENTS = ['mousedown', 'mouseup', 'mousemove', 'mouseout', 'mouseover', 'click', 'dblclick', 'contextmenu',
+  'wheel', 'mousewheel', 'pointerdown', 'pointerup', 'pointermove', 'pointerout', 'pointerover', 'pointercancel']
+
 /** 通用 ECharts 挂载：初始化、窗口 resize、卸载销毁（实例用 shallowRef，避免被响应式深代理） */
 export function useEcharts(): { el: Ref<HTMLDivElement | null>; chart: ShallowRef<echarts.EChartsType | null> } {
   const el = ref<HTMLDivElement | null>(null)
@@ -15,9 +18,10 @@ export function useEcharts(): { el: Ref<HTMLDivElement | null>; chart: ShallowRe
   let resolution: MediaQueryList | undefined
   let dpr = 1
 
+  // 画质上限按物理像素计：整页 zoom 放大 scale 倍时画布再乘 scale，像素预算与未放大时同尺寸屏幕一致
   function currentDpr() {
     const cap = store.quality === 'full' ? 2 : store.quality === 'balanced' ? 1.5 : 1
-    return Math.max(1, Math.min(window.devicePixelRatio || 1, cap))
+    return Math.max(1, Math.min(window.devicePixelRatio || 1, cap)) * store.screenScale
   }
 
   function rebuild() {
@@ -32,6 +36,16 @@ export function useEcharts(): { el: Ref<HTMLDivElement | null>; chart: ShallowRe
     chart.value = instance
     store.renderDpr = dpr
     syncMotion()
+  }
+
+  // 整页 zoom 下 MouseEvent.offsetX/Y 是视觉像素（新旧 Chrome 皆然），而 zrender 直接拿它当画布本地坐标；
+  // 在容器捕获阶段把它换算回逻辑像素，悬停、点击、Tooltip 才对得上
+  function unzoomPointer(e: Event) {
+    const z = store.screenScale
+    const pointer = e as MouseEvent & { __unzoomed?: boolean }
+    if (z === 1 || pointer.__unzoomed || typeof pointer.offsetX !== 'number') return
+    const x = pointer.offsetX / z, y = pointer.offsetY / z
+    Object.defineProperties(pointer, { offsetX: { value: x }, offsetY: { value: y }, __unzoomed: { value: true } })
   }
 
   function onResize() {
@@ -54,19 +68,21 @@ export function useEcharts(): { el: Ref<HTMLDivElement | null>; chart: ShallowRe
       textStyle: { fontFamily: FONT.family, fontSize: FONT.small, color: COLORS.secondary } })
   }
   watch(motion, syncMotion)
-  watch(() => store.quality, onResize)
+  watch(() => [store.quality, store.screenScale], onResize)
 
   onMounted(() => {
     if (el.value) {
       rebuild()
       observer = new ResizeObserver(onResize)
       observer.observe(el.value)
+      for (const name of POINTER_EVENTS) el.value.addEventListener(name, unzoomPointer, true)
       armResolution()
       window.addEventListener('resize', onResize)
     }
   })
   onBeforeUnmount(() => {
     observer?.disconnect()
+    for (const name of POINTER_EVENTS) el.value?.removeEventListener(name, unzoomPointer, true)
     resolution?.removeEventListener('change', resolutionChanged)
     window.removeEventListener('resize', onResize)
     window.clearTimeout(resizeTimer)

@@ -118,7 +118,7 @@ const date = computed(() => now.value.toLocaleDateString('zh-CN', { month: 'long
 }
 h1 {
   position: relative;
-  max-width: min(36vw, 640px);
+  max-width: min(calc(var(--vw, 1vw) * 36), 640px);
   font-size: var(--font-page);
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -136,7 +136,7 @@ h1 {
 .wing {
   position: absolute;
   bottom: 6px;
-  width: clamp(0px, calc(24vw - 80px), 460px);
+  width: clamp(0px, calc(var(--vw, 1vw) * 24 - 80px), 460px);
   height: 12px;
   pointer-events: none;
 }
@@ -195,7 +195,7 @@ h1 {
   .side.right { grid-area: right; }
   .chev { display: none; }
   .tab { padding-inline: 36px; }
-  h1 { font-size: var(--font-title); max-width: calc(100vw - 120px); }
+  h1 { font-size: var(--font-title); max-width: calc(var(--vw, 1vw) * 100 - 120px); }
   .clock { font-size: var(--font-title); }
 }
 </style>

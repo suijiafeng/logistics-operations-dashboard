@@ -105,6 +105,8 @@ export const useDashboardStore = defineStore('dashboard', {
     frameMs: 0,
     renderedVehicles: 0,
     renderDpr: 1,
+    /** 以 1080 高为基准的整页放大倍数（1 = 真实尺寸） */
+    screenScale: 1,
     lastDeltaKB: 0,
     lastDeltaAt: 0,
     latencyMs: 0,

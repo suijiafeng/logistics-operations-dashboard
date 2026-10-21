@@ -20,8 +20,9 @@ const visibleEvents = computed(() => pinned.value
   : store.events.slice(0, capacity.value))
 
 // 每条固定三行、单行省略，行高恒定，才能按容器高度准确算出可展示条数
+// 用 offsetHeight 而非 getBoundingClientRect：后者在整页 zoom 下返回视觉尺寸，与 clientHeight 口径不一致
 function measure() {
-  const height = sample.value?.getBoundingClientRect().height ?? 0
+  const height = sample.value?.offsetHeight ?? 0
   if (height > 0 && stream.value) capacity.value = Math.max(0, Math.floor(stream.value.clientHeight / height))
 }
 

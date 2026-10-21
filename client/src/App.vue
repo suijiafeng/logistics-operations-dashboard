@@ -15,15 +15,18 @@ import { useDashboardStore } from './stores/dashboard'
 import FeedNotice from './components/FeedNotice.vue'
 import { usePerformance } from './services/usePerformance'
 import { useDisplayRuntime } from './services/useDisplayRuntime'
+import { useScreenScale } from './services/useScreenScale'
 
 const store = useDashboardStore()
 usePerformance()
 useDisplayRuntime()
+const scaleStyle = useScreenScale()
 const fit = new URLSearchParams(location.search).get('fit') || 'fill'
 const seamValues = (new URLSearchParams(location.search).get('seams') || '').split(',').map(Number).filter(n => n > 0 && n < 100).sort((a,b) => a-b)
-// 两条拼缝将三屏分成三个独立安全区；不以遮罩盖住文字。
-const seamLayout = seamValues.length === 2 && seamValues[0]! >= 20 && seamValues[1]! <= 80 && seamValues[1]! - seamValues[0]! >= 20
-  ? { '--seam-left': `calc(${seamValues[0]}vw - 28px)`, '--seam-center': `calc(${seamValues[1]! - seamValues[0]!}vw - 24px)`, '--seam-right': `calc(${100-seamValues[1]!}vw - 28px)` }
+// 两条拼缝将三屏分成三个独立安全区；不以遮罩盖住文字。--vw 为逻辑视口宽的 1%，放大后拼缝仍落在物理屏的同一百分比处。
+// fit=contain 把内容收在 1920 逻辑宽内，不跨物理拼缝，因此不启用拼缝安全区
+const seamLayout = fit !== 'contain' && seamValues.length === 2 && seamValues[0]! >= 20 && seamValues[1]! <= 80 && seamValues[1]! - seamValues[0]! >= 20
+  ? { '--seam-left': `calc(${seamValues[0]} * var(--vw) - 28px)`, '--seam-center': `calc(${seamValues[1]! - seamValues[0]!} * var(--vw) - 24px)`, '--seam-right': `calc(${100-seamValues[1]!} * var(--vw) - 28px)` }
   : undefined
 let freshnessTimer: number | undefined
 function onKey(e: KeyboardEvent) {
@@ -55,7 +58,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="viewport" :class="[{ kiosk: store.kioskOn, 'cursor-hidden': store.cursorHidden }, `fit-${fit}`]">
+  <div class="viewport" data-screen-scale :class="[{ kiosk: store.kioskOn, 'cursor-hidden': store.cursorHidden, scaled: store.screenScale > 1 }, `fit-${fit}`]" :style="scaleStyle">
     <div class="screen" :class="{ 'motion-off': !store.decorationsOn, 'seam-safe': seamLayout }" :style="seamLayout">
       <div class="heading">
         <TopBar />
@@ -129,13 +132,20 @@ button:focus-visible, [role='button']:focus-visible {
 
 <style scoped>
 .viewport {
+  --vw: 1vw;
+  --vh: 1vh;
   min-height: 100vh;
   min-height: 100dvh;
 }
+/* 放大模式：zoom 后 vh 会被再乘一次，高度改用逻辑像素 --vh（由 useScreenScale 下发）。须在 fit 规则之前，fit-width 才能覆盖 */
+.viewport.scaled { min-height: calc(var(--vh) * 100); }
+.scaled .screen { height: calc(var(--vh) * 100); }
 .kiosk { user-select: none; }
 .cursor-hidden, .cursor-hidden :deep(*) { cursor: none !important; }
-.toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); max-width: calc(100vw - 32px); padding: 12px 20px; background: var(--color-panel); border: 1px solid var(--color-accent); border-radius: 8px; z-index: 200; }
+.toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); max-width: calc(var(--vw) * 100 - 32px); padding: 12px 20px; background: var(--color-panel); border: 1px solid var(--color-accent); border-radius: 8px; z-index: 200; }
 .fit-contain .screen { max-width: 1920px; margin-inline: auto; }
+/* contain 内容宽不超过 1920：组件里的 --vw 也封顶在 19.2px（放大模式由 useScreenScale 按同样口径下发） */
+.fit-contain { --vw: min(1vw, 19.2px); }
 .fit-width .screen { height: auto; }
 .screen {
   width: 100%;
@@ -185,9 +195,11 @@ button:focus-visible, [role='button']:focus-visible {
   .middle > * { contain: size; }
   .left { grid-template-rows: auto minmax(150px, 1fr) 176px; }
 }
-@media (min-width: 2400px) {
-  .middle { grid-template-columns: 520px minmax(0, 1fr) 520px; }
-  .bottom { grid-template-columns: minmax(0, 1fr) 800px; }
+/* 放大模式下逻辑高度为 1080，逻辑宽 ≥ 2400 等价于宽高比 ≥ 20/9（媒体查询只看物理 CSS 尺寸）。
+   宽屏规则都排除 fit-contain：媒体查询看的是视口，而 contain 的内容宽固定 ≤1920，应沿用 1920 布局 */
+@media (min-width: 2400px) and (max-height: 1080px), (min-height: 1081px) and (min-aspect-ratio: 20/9) {
+  .viewport:not(.fit-contain) .middle { grid-template-columns: 520px minmax(0, 1fr) 520px; }
+  .viewport:not(.fit-contain) .bottom { grid-template-columns: minmax(0, 1fr) 800px; }
 }
 @media (max-width: 1279px) {
   .screen { height: auto; grid-template-rows: auto auto auto; }
@@ -198,6 +210,7 @@ button:focus-visible, [role='button']:focus-visible {
 }
 @media (max-aspect-ratio: 3/2) and (min-width: 1280px) {
   .screen { height: auto; min-height: 100vh; grid-template-rows: auto auto 176px; }
+  .scaled .screen { height: auto; min-height: calc(var(--vh) * 100); }
   .middle { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .middle > :deep(.map-wrap) { grid-column: 1 / -1; grid-row: 1; min-height: 600px; }
   .col { min-height: 720px; }
@@ -209,23 +222,23 @@ button:focus-visible, [role='button']:focus-visible {
   .bottom { min-height: 520px; grid-template-rows: 320px 200px; }
 }
 @media (min-aspect-ratio: 5/2) and (min-width: 2000px) {
-  .middle { grid-template-columns: minmax(560px, 1fr) minmax(700px, 2fr) minmax(640px, 1fr); }
-  .left, .right { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); }
-  .left > :first-child, .right > :first-child { grid-column: 1 / -1; }
-  .left { grid-template-rows: auto minmax(0, 1fr); }
-  .right { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+  .viewport:not(.fit-contain) .middle { grid-template-columns: minmax(560px, 1fr) minmax(700px, 2fr) minmax(640px, 1fr); }
+  .viewport:not(.fit-contain) .left, .viewport:not(.fit-contain) .right { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); }
+  .viewport:not(.fit-contain) .left > :first-child, .viewport:not(.fit-contain) .right > :first-child { grid-column: 1 / -1; }
+  .viewport:not(.fit-contain) .left { grid-template-rows: auto minmax(0, 1fr); }
+  .viewport:not(.fit-contain) .right { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
 }
-@media (min-width: 2000px) {
+@media (min-width: 2000px) and (max-height: 1080px), (min-height: 1081px) and (min-aspect-ratio: 50/27) {
   /* 拼缝模式：中部与底部直接落在三屏网格里，左列向下延伸占满左屏，排行占中屏底部、仓配占右屏底部，
-     各面板宽度等于所在屏的安全区，不再把两个底部面板挤进中屏 */
-  .seam-safe { grid-template-columns: var(--seam-left) var(--seam-center) var(--seam-right); column-gap: 24px; }
-  .seam-safe .heading { grid-column: 1 / -1; }
-  .seam-safe .middle, .seam-safe .bottom { display: contents; }
-  .seam-safe .left { grid-column: 1; grid-row: 2 / 4; }
-  .seam-safe .middle > :deep(.map-wrap) { grid-column: 2; grid-row: 2; }
-  .seam-safe .right { grid-column: 3; grid-row: 2; }
-  .seam-safe .bottom > :first-child { grid-column: 2; grid-row: 3; }
-  .seam-safe .bottom > :last-child { grid-column: 3; grid-row: 3; }
-  .seam-safe :deep(.topbar) { grid-template-columns: var(--seam-left) var(--seam-center) var(--seam-right); gap: 24px; padding-inline: 0; }
+     各面板宽度等于所在屏的安全区，不再把两个底部面板挤进中屏；fit=contain 不启用拼缝 */
+  .viewport:not(.fit-contain) .seam-safe { grid-template-columns: var(--seam-left) var(--seam-center) var(--seam-right); column-gap: 24px; }
+  .viewport:not(.fit-contain) .seam-safe .heading { grid-column: 1 / -1; }
+  .viewport:not(.fit-contain) .seam-safe .middle, .viewport:not(.fit-contain) .seam-safe .bottom { display: contents; }
+  .viewport:not(.fit-contain) .seam-safe .left { grid-column: 1; grid-row: 2 / 4; }
+  .viewport:not(.fit-contain) .seam-safe .middle > :deep(.map-wrap) { grid-column: 2; grid-row: 2; }
+  .viewport:not(.fit-contain) .seam-safe .right { grid-column: 3; grid-row: 2; }
+  .viewport:not(.fit-contain) .seam-safe .bottom > :first-child { grid-column: 2; grid-row: 3; }
+  .viewport:not(.fit-contain) .seam-safe .bottom > :last-child { grid-column: 3; grid-row: 3; }
+  .viewport:not(.fit-contain) .seam-safe :deep(.topbar) { grid-template-columns: var(--seam-left) var(--seam-center) var(--seam-right); gap: 24px; padding-inline: 0; }
 }
 </style>
