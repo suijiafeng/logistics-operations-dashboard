@@ -52,8 +52,5 @@ export const ROUTES: [string, string][] = [
 
 export const hubById: Record<string, Hub> = Object.fromEntries(HUBS.map((h) => [h.id, h]))
 
-// 广东省经纬度范围（下钻视图里过滤散点用，粗粒度包围盒）
-export const GD_BOUNDS = { lngMin: 109.6, lngMax: 117.3, latMin: 20.1, latMax: 25.6 }
-
 // 明确的行政归属，用于仓配列表；车辆点位下钻使用 GeoJSON 精确判定。
 export const GUANGDONG_HUB_IDS = new Set(['gz', 'sz', 'dg', 'fs', 'zh', 'zs', 'hz', 'st', 'jy', 'zj'])

@@ -22,10 +22,18 @@ function updateScale() {
 
 const store = useDashboardStore()
 function onKey(e: KeyboardEvent) {
-  if (e.key === 'h' || e.key === 'H') store.hudOn = !store.hudOn
+  if (e.key === 'Escape') store.selectHub(null)
+  if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return
+  const target = e.target as HTMLElement | null
+  if (target?.isContentEditable || target?.closest('input, textarea, select')) return
+  if (e.key.toLowerCase() === 'h') store.toggleHud()
 }
 
 onMounted(() => {
+  const hud = new URLSearchParams(location.search).get('hud')
+  try {
+    store.hudOn = hud === '1' || (hud !== '0' && localStorage.getItem('logistics-hud') === '1')
+  } catch { store.hudOn = hud === '1' }
   updateScale()
   window.addEventListener('resize', updateScale)
   window.addEventListener('keydown', onKey)
@@ -78,13 +86,20 @@ onBeforeUnmount(() => {
 html,
 body {
   height: 100%;
-  background: #04070a;
+  background: #070b10;
   overflow: hidden;
 }
 body {
   font-family: 'Noto Sans CJK SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   color: #d7e2ec;
   -webkit-font-smoothing: antialiased;
+}
+button:focus-visible, [role='button']:focus-visible {
+  outline: 2px solid #ffb066;
+  outline-offset: 3px;
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
 }
 </style>
 

@@ -1,27 +1,52 @@
 <script setup lang="ts">
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import Panel from './Panel.vue'
 import { useDashboardStore } from '../stores/dashboard'
+import { GUANGDONG_HUB_IDS } from '../data/network'
 
 const store = useDashboardStore()
 const LEVEL_CLASS = ['lv0', 'lv1', 'lv2']
 const LEVEL_TEXT = ['提醒', '警告', '严重']
+const stream = ref<HTMLDivElement | null>(null)
+const capacity = ref(0)
+let observer: ResizeObserver | undefined
+const visibleEvents = computed(() => [...store.events]
+  .sort((a, b) => b.level - a.level || b.id - a.id).slice(0, capacity.value))
+
+function locate(place: string) {
+  const destination = place.split('→').at(-1)?.trim()
+  const hub = store.hubs.find((h) => h.name === destination)
+  if (!hub) return
+  store.setView(GUANGDONG_HUB_IDS.has(hub.id) ? 'guangdong' : 'china')
+  store.selectHub(hub.id)
+}
+
+onMounted(() => {
+  observer = new ResizeObserver(([entry]) => {
+    capacity.value = Math.max(0, Math.floor(entry.contentRect.height / 72))
+  })
+  if (stream.value) observer.observe(stream.value)
+})
+onBeforeUnmount(() => observer?.disconnect())
 </script>
 
 <template>
-  <Panel title="实时异常事件" extra="模拟引擎推送">
-    <div class="stream">
+  <Panel title="实时异常事件" extra="严重优先 · 点击定位">
+    <div ref="stream" class="stream">
       <p v-if="store.events.length === 0" class="empty">暂无异常事件，等待模拟引擎推送…</p>
       <TransitionGroup name="evt" tag="ul" class="list">
-        <li v-for="e in store.events" :key="e.id" class="item">
+        <li v-for="e in visibleEvents" :key="e.id" class="item" role="button" tabindex="0"
+          :aria-label="`${e.type}，${e.place}，点击定位目的网点`"
+          @click="locate(e.place)" @keydown.enter="locate(e.place)" @keydown.space.prevent="locate(e.place)">
           <span class="badge" :class="LEVEL_CLASS[e.level]">{{ LEVEL_TEXT[e.level] }}</span>
           <div class="main">
             <div class="line1">
               <b>{{ e.type }}</b>
               <span class="vehicle">{{ e.vehicle }}</span>
-              <span class="place">{{ e.place }}</span>
               <time>{{ e.time }}</time>
             </div>
-            <p class="desc">{{ e.desc }}</p>
+            <p class="place" :title="e.place">{{ e.place }}</p>
+            <p class="desc" :title="e.desc">{{ e.desc }}</p>
           </div>
         </li>
       </TransitionGroup>
@@ -37,7 +62,7 @@ const LEVEL_TEXT = ['提醒', '警告', '严重']
   position: relative;
 }
 .empty {
-  color: #4c5d6e;
+  color: #8fa3b8;
   font-size: 13px;
   padding: 8px 4px;
 }
@@ -49,7 +74,10 @@ const LEVEL_TEXT = ['提醒', '警告', '严重']
   gap: 9px;
   padding: 7px 4px;
   border-bottom: 1px dashed #16222d;
+  height: 72px;
+  cursor: pointer;
 }
+.item:hover { background: #16202a; }
 .badge {
   flex: none;
   height: 20px;
@@ -90,21 +118,24 @@ const LEVEL_TEXT = ['提醒', '警告', '严重']
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  font-size: 12px;
+  line-height: 18px;
 }
 time {
   margin-left: auto;
-  color: #4c5d6e;
+  color: #8fa3b8;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   flex: none;
 }
 .desc {
   font-size: 12px;
-  color: #63788d;
+  color: #8fa3b8;
   margin-top: 1px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  line-height: 16px;
 }
 .evt-enter-active {
   transition: all 0.35s ease;

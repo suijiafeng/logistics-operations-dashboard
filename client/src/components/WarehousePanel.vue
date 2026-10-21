@@ -2,24 +2,23 @@
 import { computed } from 'vue'
 import Panel from './Panel.vue'
 import { useDashboardStore } from '../stores/dashboard'
-import { GD_BOUNDS } from '../data/network'
+import { GUANGDONG_HUB_IDS } from '../data/network'
 
 const store = useDashboardStore()
-// 广东网点：坐标落在广东包围盒内的分拨中心
+// 使用行政归属，避免包围盒把外省网点误纳入。
 const gdHubs = computed(() =>
   store.hubs
-    .filter(
-      (h) =>
-        h.lng >= GD_BOUNDS.lngMin && h.lng <= GD_BOUNDS.lngMax && h.lat >= GD_BOUNDS.latMin && h.lat <= GD_BOUNDS.latMax,
-    )
+    .filter((h) => GUANGDONG_HUB_IDS.has(h.id))
     .sort((a, b) => (b.utilization ?? 0) - (a.utilization ?? 0)),
 )
 </script>
 
 <template>
-  <Panel title="广东仓配概览" extra="利用率">
+  <Panel title="广东仓配概览" :extra="`利用率 TOP8 · 共 ${gdHubs.length} 个`">
     <ul class="list">
-      <li v-for="h in gdHubs" :key="h.id" @click="store.selectHub(h.id)">
+      <li v-for="h in gdHubs.slice(0, 8)" :key="h.id" :class="{ selected: h.id === store.selectedHubId }"
+        role="button" tabindex="0" :aria-pressed="h.id === store.selectedHubId"
+        @click="store.selectHub(h.id)" @keydown.enter="store.selectHub(h.id)" @keydown.space.prevent="store.selectHub(h.id)">
         <span class="name">{{ h.name }}</span>
         <span class="bar">
           <span
@@ -42,6 +41,7 @@ const gdHubs = computed(() =>
   display: flex;
   flex-direction: column;
   justify-content: space-around;
+  min-height: 0;
 }
 li {
   display: flex;
@@ -54,6 +54,7 @@ li {
 li:hover {
   background: #111a23;
 }
+li.selected { background: #2a251e; box-shadow: inset 2px 0 #ff8a3d; }
 .name {
   width: 34px;
   font-size: 13px;
@@ -87,7 +88,7 @@ li:hover {
 .backlog {
   width: 86px;
   font-size: 12px;
-  color: #63788d;
+  color: #8fa3b8;
   flex: none;
 }
 </style>

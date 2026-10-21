@@ -55,6 +55,7 @@ export const useDashboardStore = defineStore('dashboard', {
     connected: false,
     connectionState: 'connecting' as 'connecting' | 'connected' | 'reconnecting' | 'error' | 'idle',
     connectionError: '',
+    reconnectAttempt: 0,
     dataAt: 0,
     vehicleCount: 0,
     // 扁平数组 [lng, lat, status] * N，由推送整包替换引用（不在响应式里逐项改）
@@ -72,7 +73,7 @@ export const useDashboardStore = defineStore('dashboard', {
     events: [] as AnomalyEvent[],
     selectedHubId: null as string | null,
     view: 'china' as 'china' | 'guangdong',
-    hudOn: true,
+    hudOn: false,
     lastDeltaKB: 0,
     lastDeltaAt: 0,
     latencyMs: 0,
@@ -132,6 +133,12 @@ export const useDashboardStore = defineStore('dashboard', {
     setView(v: 'china' | 'guangdong') {
       this.view = v
       this.mapVersion++
+    },
+    toggleHud() {
+      this.hudOn = !this.hudOn
+      try {
+        localStorage.setItem('logistics-hud', this.hudOn ? '1' : '0')
+      } catch { /* 浏览器禁用存储时仍可切换 */ }
     },
     setConnectionState(
       state: 'connecting' | 'connected' | 'reconnecting' | 'error' | 'idle',

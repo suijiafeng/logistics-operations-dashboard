@@ -13,7 +13,9 @@ const max = computed(() => {
 <template>
   <Panel title="网点吞吐 TOP5" extra="到车 + 发车">
     <ul class="list">
-      <li v-for="(h, i) in store.topHubs" :key="h.id" @click="store.selectHub(h.id)">
+      <li v-for="(h, i) in store.topHubs" :key="h.id" :class="{ selected: h.id === store.selectedHubId }"
+        role="button" tabindex="0" :aria-pressed="h.id === store.selectedHubId"
+        @click="store.selectHub(h.id)" @keydown.enter="store.selectHub(h.id)" @keydown.space.prevent="store.selectHub(h.id)">
         <span class="rank">{{ i + 1 }}</span>
         <span class="name">{{ h.name }}</span>
         <span class="bar">
@@ -47,6 +49,7 @@ li {
 li:hover {
   background: #111a23;
 }
+li.selected { background: #2a251e; box-shadow: inset 2px 0 #ff8a3d; }
 .rank {
   width: 18px;
   height: 18px;

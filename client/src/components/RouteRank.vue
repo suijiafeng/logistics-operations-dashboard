@@ -26,6 +26,7 @@ const max = computed(() => store.routeVolumes[0]?.value ?? 1)
   display: grid;
   grid-template-columns: 1fr 1fr;
   grid-template-rows: repeat(4, 1fr);
+  grid-auto-flow: column;
   column-gap: 36px;
   align-items: center;
   padding: 0 6px;
@@ -61,6 +62,7 @@ const max = computed(() => store.routeVolumes[0]?.value ?? 1)
   background: #16202a;
   border-radius: 4px;
   overflow: hidden;
+  max-width: 520px;
 }
 .fill {
   display: block;

@@ -14,7 +14,7 @@ function fmt(n?: number) {
   <div v-if="hub" class="hub-detail">
     <header>
       <h4>{{ hub.name }}分拨中心</h4>
-      <button class="close" @click="store.selectHub(null)">×</button>
+      <button class="close" aria-label="关闭网点详情（Esc）" @click="store.selectHub(null)">×</button>
     </header>
     <div class="rows">
       <div class="row"><span>今日到车</span><b>{{ fmt(hub.arrivals) }} 台</b></div>
@@ -104,7 +104,7 @@ h4 {
 .note {
   margin-top: 10px;
   font-size: 12px;
-  color: #4c5d6e;
+  color: #8fa3b8;
   line-height: 1.5;
 }
 </style>

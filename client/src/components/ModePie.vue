@@ -18,23 +18,30 @@ function render() {
       backgroundColor: '#131c26',
       borderWidth: 0,
       textStyle: { color: '#d7e2ec', fontSize: 12 },
-      formatter: '{b}：{d}%',
+      formatter: (p: { name: string; percent?: number }) => `${p.name}：${(p.percent ?? 0).toFixed(0)}%`,
     },
     legend: {
-      bottom: 0,
-      left: 'center',
+      top: 'middle',
+      right: 2,
+      orient: 'vertical',
+      itemGap: 16,
       itemWidth: 10,
       itemHeight: 10,
       textStyle: { ...TEXT, fontSize: 12 },
+      formatter: (name: string) => {
+        const sum = store.modes.reduce((total, item) => total + item.value, 0)
+        const value = store.modes.find((item) => item.name === name)?.value ?? 0
+        return `${name}  ${sum ? (value / sum * 100).toFixed(0) : '0'}%`
+      },
     },
     series: [
       {
         type: 'pie',
-        radius: ['48%', '68%'],
-        center: ['50%', '40%'],
+        radius: ['36%', '52%'],
+        center: ['26%', '50%'],
         itemStyle: { borderColor: '#0d141b', borderWidth: 2 },
-        label: { color: '#c8d6e3', fontSize: 11, formatter: '{d}%' },
-        labelLine: { lineStyle: { color: '#39506a' }, length: 8, length2: 6 },
+        label: { show: false },
+        labelLine: { show: false },
         data: store.modes.map((m, i) => ({ ...m, itemStyle: { color: COLORS[i % COLORS.length] } })),
       },
     ],

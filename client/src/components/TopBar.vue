@@ -53,15 +53,19 @@ function fmt(n: number) {
 
     <div class="meta">
       <div class="clock">
-        {{ now.toLocaleTimeString('zh-CN', { hour12: false }) }}
-        <span class="date">{{ now.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'short' }) }}</span>
+        {{ now.toLocaleTimeString('zh-CN', { hour12: false, timeZone: 'Asia/Shanghai' }) }}
+        <span class="date">{{ now.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'short', timeZone: 'Asia/Shanghai' }) }}</span>
       </div>
       <div class="status" :title="store.connectionError || undefined">
         <span class="dot" :class="{ off: !store.connected, waiting: store.connectionState === 'connecting' || store.connectionState === 'reconnecting' }" />
         {{ STATUS_TEXT[store.connectionState] }}
+        <span v-if="store.reconnectAttempt">（第 {{ store.reconnectAttempt }} 次）</span>
         <span class="sim">数据来源：自研模拟引擎（仿真数据）</span>
       </div>
-      <button class="hud-btn" :class="{ on: store.hudOn }" @click="store.hudOn = !store.hudOn">性能 HUD</button>
+      <div class="tools">
+        <span class="updated">{{ store.dataAt ? `更新 ${new Date(store.dataAt).toLocaleTimeString('zh-CN', { hour12: false, timeZone: 'Asia/Shanghai' })}` : '等待首包数据' }}</span>
+        <button class="hud-btn" :aria-pressed="store.hudOn" :class="{ on: store.hudOn }" @click="store.toggleHud()">性能 HUD</button>
+      </div>
     </div>
   </header>
 </template>
@@ -101,7 +105,7 @@ function fmt(n: number) {
 }
 .titles p {
   font-size: 12px;
-  color: #63788d;
+  color: #8fa3b8;
   letter-spacing: 3px;
   margin-top: 1px;
 }
@@ -121,7 +125,7 @@ function fmt(n: number) {
   letter-spacing: 2px;
 }
 .kpi-value {
-  font-size: 27px;
+  font-size: 30px;
   font-weight: 700;
   color: #ffd9ae;
   font-variant-numeric: tabular-nums;
@@ -151,7 +155,7 @@ function fmt(n: number) {
 }
 .clock .date {
   font-size: 12px;
-  color: #63788d;
+  color: #8fa3b8;
   margin-left: 8px;
   font-weight: 400;
 }
@@ -178,7 +182,7 @@ function fmt(n: number) {
   animation: pulse 1.6s infinite;
 }
 .status .sim {
-  color: #4c5d6e;
+  color: #8fa3b8;
   margin-left: 6px;
 }
 @keyframes pulse {
@@ -201,4 +205,6 @@ function fmt(n: number) {
   color: #131313;
   font-weight: 600;
 }
+.tools { display: flex; align-items: center; gap: 12px; }
+.updated { font-size: 11px; color: #8fa3b8; font-variant-numeric: tabular-nums; }
 </style>

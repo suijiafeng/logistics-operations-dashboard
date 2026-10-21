@@ -46,7 +46,7 @@ defineProps<{ title: string; extra?: string }>()
 .panel-head .extra {
   margin-left: auto;
   font-size: 12px;
-  color: #63788d;
+  color: #8fa3b8;
 }
 .panel-body {
   flex: 1;

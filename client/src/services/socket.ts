@@ -88,6 +88,7 @@ function connectWs() {
   ws = new WebSocket(websocketUrl())
   ws.onopen = () => {
     reconnectAttempt = 0
+    store.reconnectAttempt = 0
     store.setConnectionState('connected')
   }
   ws.onmessage = (ev) => {
@@ -115,6 +116,7 @@ function scheduleReconnect(reason: string) {
   const store = useDashboardStore()
   if (stopped || reconnectTimer !== undefined) return
   reconnectAttempt++
+  store.reconnectAttempt = reconnectAttempt
   const baseDelay = Math.min(30_000, 1000 * 2 ** Math.min(reconnectAttempt - 1, 5))
   const delay = Math.round(baseDelay * (0.85 + Math.random() * 0.3))
   const state = reconnectAttempt >= 6 ? 'error' : 'reconnecting'
