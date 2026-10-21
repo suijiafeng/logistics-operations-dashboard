@@ -289,7 +289,7 @@ function routeFocusData() {
 
 function routeName(index: number) {
   const [a, b] = ROUTES[index]!
-  return `${hubById[a]!.name} → ${hubById[b]!.name}`
+  return `${hubById[a]!.name} ↔ ${hubById[b]!.name}`
 }
 
 function routeTooltip(p: { data?: { routeIndex?: number } }) {
