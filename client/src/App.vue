@@ -15,15 +15,17 @@ import { useDashboardStore } from './stores/dashboard'
 import FeedNotice from './components/FeedNotice.vue'
 import { usePerformance } from './services/usePerformance'
 import { useDisplayRuntime } from './services/useDisplayRuntime'
+import { useScreenScale } from './services/useScreenScale'
 
 const store = useDashboardStore()
 usePerformance()
 useDisplayRuntime()
+const scaleStyle = useScreenScale()
 const fit = new URLSearchParams(location.search).get('fit') || 'fill'
 const seamValues = (new URLSearchParams(location.search).get('seams') || '').split(',').map(Number).filter(n => n > 0 && n < 100).sort((a,b) => a-b)
-// 两条拼缝将三屏分成三个独立安全区；不以遮罩盖住文字。
+// 两条拼缝将三屏分成三个独立安全区；不以遮罩盖住文字。--vw 为逻辑视口宽的 1%，放大后拼缝仍落在物理屏的同一百分比处。
 const seamLayout = seamValues.length === 2 && seamValues[0]! >= 20 && seamValues[1]! <= 80 && seamValues[1]! - seamValues[0]! >= 20
-  ? { '--seam-left': `calc(${seamValues[0]}vw - 28px)`, '--seam-center': `calc(${seamValues[1]! - seamValues[0]!}vw - 24px)`, '--seam-right': `calc(${100-seamValues[1]!}vw - 28px)` }
+  ? { '--seam-left': `calc(${seamValues[0]} * var(--vw) - 28px)`, '--seam-center': `calc(${seamValues[1]! - seamValues[0]!} * var(--vw) - 24px)`, '--seam-right': `calc(${100-seamValues[1]!} * var(--vw) - 28px)` }
   : undefined
 let freshnessTimer: number | undefined
 function onKey(e: KeyboardEvent) {
@@ -55,7 +57,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="viewport" :class="[{ kiosk: store.kioskOn, 'cursor-hidden': store.cursorHidden }, `fit-${fit}`]">
+  <div class="viewport" data-screen-scale :class="[{ kiosk: store.kioskOn, 'cursor-hidden': store.cursorHidden, scaled: store.screenScale > 1 }, `fit-${fit}`]" :style="scaleStyle">
     <div class="screen" :class="{ 'motion-off': !store.decorationsOn, 'seam-safe': seamLayout }" :style="seamLayout">
       <div class="heading">
         <TopBar />
@@ -129,12 +131,17 @@ button:focus-visible, [role='button']:focus-visible {
 
 <style scoped>
 .viewport {
+  --vw: 1vw;
+  --vh: 1vh;
   min-height: 100vh;
   min-height: 100dvh;
 }
+/* 放大模式：zoom 后 vh 会被再乘一次，高度改用逻辑像素 --vh（由 useScreenScale 下发）。须在 fit 规则之前，fit-width 才能覆盖 */
+.viewport.scaled { min-height: calc(var(--vh) * 100); }
+.scaled .screen { height: calc(var(--vh) * 100); }
 .kiosk { user-select: none; }
 .cursor-hidden, .cursor-hidden :deep(*) { cursor: none !important; }
-.toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); max-width: calc(100vw - 32px); padding: 12px 20px; background: var(--color-panel); border: 1px solid var(--color-accent); border-radius: 8px; z-index: 200; }
+.toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); max-width: calc(var(--vw) * 100 - 32px); padding: 12px 20px; background: var(--color-panel); border: 1px solid var(--color-accent); border-radius: 8px; z-index: 200; }
 .fit-contain .screen { max-width: 1920px; margin-inline: auto; }
 .fit-width .screen { height: auto; }
 .screen {
@@ -185,7 +192,8 @@ button:focus-visible, [role='button']:focus-visible {
   .middle > * { contain: size; }
   .left { grid-template-rows: auto minmax(150px, 1fr) 176px; }
 }
-@media (min-width: 2400px) {
+/* 放大模式下逻辑高度为 1080，逻辑宽 ≥ 2400 等价于宽高比 ≥ 20/9（媒体查询只看物理 CSS 尺寸） */
+@media (min-width: 2400px) and (max-height: 1080px), (min-height: 1081px) and (min-aspect-ratio: 20/9) {
   .middle { grid-template-columns: 520px minmax(0, 1fr) 520px; }
   .bottom { grid-template-columns: minmax(0, 1fr) 800px; }
 }
@@ -198,6 +206,7 @@ button:focus-visible, [role='button']:focus-visible {
 }
 @media (max-aspect-ratio: 3/2) and (min-width: 1280px) {
   .screen { height: auto; min-height: 100vh; grid-template-rows: auto auto 176px; }
+  .scaled .screen { height: auto; min-height: calc(var(--vh) * 100); }
   .middle { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .middle > :deep(.map-wrap) { grid-column: 1 / -1; grid-row: 1; min-height: 600px; }
   .col { min-height: 720px; }
@@ -215,7 +224,7 @@ button:focus-visible, [role='button']:focus-visible {
   .left { grid-template-rows: auto minmax(0, 1fr); }
   .right { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
 }
-@media (min-width: 2000px) {
+@media (min-width: 2000px) and (max-height: 1080px), (min-height: 1081px) and (min-aspect-ratio: 50/27) {
   .seam-safe .middle { grid-template-columns: var(--seam-left) var(--seam-center) var(--seam-right); gap: 24px; }
   .seam-safe :deep(.topbar) { grid-template-columns: var(--seam-left) var(--seam-center) var(--seam-right); gap: 24px; padding-inline: 0; }
   .seam-safe .bottom { margin-left: calc(var(--seam-left) + 24px); margin-right: calc(var(--seam-right) + 24px); }

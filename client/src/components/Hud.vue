@@ -13,7 +13,8 @@ const store = useDashboardStore()
     <div class="row"><span>平均帧耗时</span><b>{{ store.frameMs }} ms</b></div>
     <div class="row"><span>车辆点位</span><b>{{ store.hasData ? store.vehicleCount.toLocaleString('zh-CN') : '—' }}</b></div>
     <div class="row"><span>本视图渲染</span><b>{{ store.renderedVehicles.toLocaleString('zh-CN') }}</b></div>
-    <div class="row"><span>画质 / DPR</span><b>{{ store.quality }} / {{ store.renderDpr }}</b></div>
+    <div class="row"><span>画质 / DPR</span><b>{{ store.quality }} / {{ +store.renderDpr.toFixed(2) }}</b></div>
+    <div class="row"><span>页面缩放</span><b>×{{ store.screenScale }}</b></div>
     <p v-if="store.qualityReason" class="quality-note">{{ store.qualityReason }}</p>
     <div class="row"><span>增量包大小</span><b>{{ store.lastDeltaKB.toFixed(1) }} KB/s</b></div>
     <div class="row"><span>推送延迟</span><b>{{ store.latencyMs }} ms</b></div>
