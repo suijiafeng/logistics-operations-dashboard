@@ -6,6 +6,7 @@
 
 import { HUBS, ROUTES, hubById } from './network.js'
 import { routeKm, pointAtKm, headingAtKm } from './routes.js'
+import { stepShipments, shipmentStats } from './shipments.js'
 import { readMetrics, readModes, readHubHistory, readYesterdayTrend } from './metrics.js'
 
 export const VEHICLE_COUNT = 12000
@@ -93,12 +94,6 @@ const state = {
   /** 本轮状态有变化的告警，随 delta 推送后清空 */
   alertChanges: new Map(),
   closedToday: [],
-  punctuality: [
-    { name: '准时送达', value: 82 },
-    { name: '延误 <2h', value: 11 },
-    { name: '延误 2–6h', value: 5 },
-    { name: '延误 >6h', value: 2 },
-  ],
 }
 
 const EVENT_TEMPLATES = [
@@ -234,6 +229,8 @@ export function step(dtMs) {
   metrics = nextMetrics
   const dt = dtMs / 1000
   state.tick++
+  // 运单实体与五段状态机（按同一批确定性运单累计创建实体）
+  stepShipments(Date.now())
   let activeAnomalies = 0
   for (const v of vehicles) {
     const now = state.tick
@@ -371,6 +368,12 @@ function flatPositions() {
   return arr
 }
 
+// 时效分布由签收实体统计；运单漏斗 / 在制 / OD 一并推送
+function shipmentPayload() {
+  const stats = shipmentStats()
+  return { punctuality: stats.punctuality, shipments: stats }
+}
+
 function routeVolumes() {
   return ROUTES.map(([a, b], index) => ({
     id: `${a}-${b}`, fromId: a, toId: b,
@@ -405,7 +408,7 @@ export function snapshot() {
     trend: [...metrics.trend],
     trendYesterday: readYesterdayTrend(),
     modes: readModes(),
-    punctuality: state.punctuality.map((p) => ({ ...p })),
+    ...shipmentPayload(),
     routeVolumes: routeVolumes(),
     // 全部干线今日单量（ROUTES 顺序），供地图按单量分级与线路详情使用；排行仍只取前 8
     routeOrders: [...metrics.routes],
@@ -445,7 +448,7 @@ export function delta() {
     trend: [...metrics.trend],
     trendYesterday: readYesterdayTrend(),
     modes: readModes(),
-    punctuality: state.punctuality.map((p) => ({ ...p })),
+    ...shipmentPayload(),
     routeVolumes: routeVolumes(),
     routeOrders: [...metrics.routes],
     events,

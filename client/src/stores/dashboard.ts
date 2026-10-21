@@ -62,6 +62,21 @@ export interface AlertStats {
 }
 export function isAlertOpen(event: AnomalyEvent) { return event.status !== 'closed' }
 
+/** 运单实体聚合：五段漏斗累计、各段在制、签收与时效、省际 OD（adcode） */
+export interface ShipmentStats {
+  stages: string[]
+  funnel: number[]
+  inStage: number[]
+  signedToday: number
+  live: number
+  avgDelayMin: number
+  punctuality: NameValue[]
+  od: { from: string; to: string; value: number }[]
+  /** 省内流向合计（不进桑基图） */
+  odIntra: number
+  odTotal: number
+}
+
 export interface NameValue {
   id?: string
   fromId?: string
@@ -86,6 +101,7 @@ export interface SnapshotMsg {
   routeVolumes: NameValue[]
   routeOrders?: number[]
   alertStats?: AlertStats
+  shipments?: ShipmentStats
 }
 
 export interface DeltaMsg {
@@ -104,6 +120,7 @@ export interface DeltaMsg {
   events: AnomalyEvent[]
   alertUpdates?: AnomalyEvent[]
   alertStats?: AlertStats
+  shipments?: ShipmentStats
 }
 
 function countFleet(flat: number[]): [number, number, number][] {
@@ -147,6 +164,7 @@ export const useDashboardStore = defineStore('dashboard', {
     routeFleet: [] as [number, number, number][],
     events: [] as AnomalyEvent[],
     alertStats: null as AlertStats | null,
+    shipments: null as ShipmentStats | null,
     /** 告警面板筛选：待处理（未关闭）/ 全部 */
     alertFilter: 'pending' as 'pending' | 'all',
     /** 正在提交处置的告警 id，防止重复点击 */
@@ -239,6 +257,7 @@ export const useDashboardStore = defineStore('dashboard', {
       this.routeVolumes = msg.routeVolumes
       if (msg.routeOrders) this.routeOrders = msg.routeOrders
       if (msg.alertStats) this.alertStats = msg.alertStats
+      if (msg.shipments) this.shipments = msg.shipments
       if (msg.events) this.mergeEvents(msg.events)
       this.mapVersion++
       this.chartVersion++
@@ -265,6 +284,7 @@ export const useDashboardStore = defineStore('dashboard', {
       this.routeVolumes = msg.routeVolumes
       if (msg.routeOrders) this.routeOrders = msg.routeOrders
       if (msg.alertStats) this.alertStats = msg.alertStats
+      if (msg.shipments) this.shipments = msg.shipments
       this.mergeEvents(msg.alertUpdates ? [...msg.events, ...msg.alertUpdates] : msg.events)
       this.lastDeltaKB = payloadKB
       this.latencyMs = Math.max(0, Date.now() - msg.ts)

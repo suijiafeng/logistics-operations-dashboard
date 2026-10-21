@@ -75,6 +75,10 @@ function validStats(value: Record<string, unknown>, fullHubs: boolean) {
     Array.isArray(value.hubs) && value.hubs.every(h => validHub(h, fullHubs)) &&
     (events === undefined || Array.isArray(events) && events.every(validEvent)) &&
     optional(value.alertUpdates, items => Array.isArray(items) && items.every(validEvent)) &&
+    optional(value.shipments, s => isRecord(s) && Array.isArray(s.stages) && s.stages.length === 5 && s.stages.every(isString) &&
+      ['funnel', 'inStage'].every(k => Array.isArray(s[k]) && (s[k] as unknown[]).length === 5 && (s[k] as unknown[]).every(n => finite(n) && n >= 0)) &&
+      ['signedToday', 'live', 'avgDelayMin', 'odIntra', 'odTotal'].every(k => finite(s[k])) && named(s.punctuality) &&
+      Array.isArray(s.od) && s.od.every(f => isRecord(f) && isString(f.from) && isString(f.to) && finite(f.value))) &&
     optional(value.alertStats, s => isRecord(s) && ['open', 'acked', 'handling', 'closedToday', 'closedManual'].every(k => finite(s[k]) && (s[k] as number) >= 0) &&
       (s.avgHandleMin === null || finite(s.avgHandleMin)) && Array.isArray(s.byLevel) && s.byLevel.length === 3 && s.byLevel.every(finite))
 }

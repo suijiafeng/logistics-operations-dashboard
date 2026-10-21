@@ -7,6 +7,8 @@ import VehicleDetail from './components/VehicleDetail.vue'
 import RouteDetail from './components/RouteDetail.vue'
 import TrendChart from './components/TrendChart.vue'
 import KpiOverview from './components/KpiOverview.vue'
+import ShipmentFunnel from './components/ShipmentFunnel.vue'
+import OdSankey from './components/OdSankey.vue'
 import TopHubs from './components/TopHubs.vue'
 import EventStream from './components/EventStream.vue'
 import WarehousePanel from './components/WarehousePanel.vue'
@@ -74,6 +76,7 @@ onBeforeUnmount(() => {
       <main class="middle">
         <div class="col left">
           <KpiOverview />
+          <ShipmentFunnel />
           <TrendChart />
           <TopHubs />
         </div>
@@ -86,6 +89,7 @@ onBeforeUnmount(() => {
         </MapChart>
         <div class="col right">
           <EventStream />
+          <OdSankey />
         </div>
       </main>
       <footer class="bottom">
@@ -198,8 +202,8 @@ button:focus-visible, [role='button']:focus-visible {
   min-height: 0;
   min-width: 0;
 }
-.left { grid-template-rows: auto minmax(160px, 1fr) 236px; }
-.right { grid-template-rows: minmax(0, 1fr); }
+.left { grid-template-rows: auto auto minmax(160px, 1fr) 236px; }
+.right { grid-template-rows: minmax(0, 1fr) 236px; }
 .bottom {
   min-height: 0;
   display: grid;
@@ -209,7 +213,8 @@ button:focus-visible, [role='button']:focus-visible {
 @media (max-width: 1599px), (max-height: 980px) {
   .screen { grid-template-rows: auto minmax(520px, 1fr) 168px; }
   .middle { grid-template-columns: 340px minmax(0, 1fr) 340px; }
-  .left { grid-template-rows: auto minmax(150px, 1fr) 220px; }
+  .left { grid-template-rows: auto auto minmax(150px, 1fr) 220px; }
+  .right { grid-template-rows: minmax(0, 1fr) 220px; }
   .bottom { grid-template-columns: minmax(0, 1fr) 520px; }
 }
 /* 矮屏（如 1366×768 笔记本）：正常状态一屏放下；出现数据提示条时允许少量滚动，不压缩图表可读高度 */
@@ -218,7 +223,8 @@ button:focus-visible, [role='button']:focus-visible {
   .middle, .col, .bottom { gap: var(--space-2); }
   /* 中间三列不以内容撑高（告警条数随高度变化，避免互相放大），行高只取最小值与剩余空间 */
   .middle > * { contain: size; }
-  .left { grid-template-rows: auto minmax(150px, 1fr) 176px; }
+  .left { grid-template-rows: auto auto minmax(150px, 1fr) 176px; }
+  .right { grid-template-rows: minmax(0, 1fr) 176px; }
 }
 /* 放大模式下逻辑高度为 1080，逻辑宽 ≥ 2400 等价于宽高比 ≥ 20/9（媒体查询只看物理 CSS 尺寸）。
    宽屏规则都排除 fit-contain：媒体查询看的是视口，而 contain 的内容宽固定 ≤1920，应沿用 1920 布局 */
@@ -250,8 +256,9 @@ button:focus-visible, [role='button']:focus-visible {
   .viewport:not(.fit-contain) .middle { grid-template-columns: minmax(560px, 1fr) minmax(700px, 2fr) minmax(640px, 1fr); }
   .viewport:not(.fit-contain) .left, .viewport:not(.fit-contain) .right { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); }
   .viewport:not(.fit-contain) .left > :first-child, .viewport:not(.fit-contain) .right > :first-child { grid-column: 1 / -1; }
-  .viewport:not(.fit-contain) .left { grid-template-rows: auto minmax(0, 1fr); }
-  .viewport:not(.fit-contain) .right { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+  .viewport:not(.fit-contain) .left { grid-template-rows: auto auto minmax(0, 1fr); }
+  .viewport:not(.fit-contain) .left > :nth-child(2) { grid-column: 1 / -1; }
+  .viewport:not(.fit-contain) .right { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) 236px; }
 }
 @media (min-width: 2000px) and (max-height: 1080px), (min-height: 1081px) and (min-aspect-ratio: 50/27) {
   /* 拼缝模式：中部与底部直接落在三屏网格里，左列向下延伸占满左屏，排行占中屏底部、仓配占右屏底部，
