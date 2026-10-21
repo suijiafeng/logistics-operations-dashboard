@@ -45,11 +45,13 @@ onBeforeUnmount(() => observer?.disconnect())
         :title="`${h.name} · 利用率 ${h.utilization ?? 0}% · 积压 ${fmtInt(h.backlog)} 件`"
         :aria-label="`${h.name}，利用率 ${h.utilization ?? 0}%，${(h.utilization ?? 0) >= HIGH_UTILIZATION ? '高负载' : '正常'}，积压 ${h.backlog ?? 0} 件`"
         @click="store.selectHub(h.id)" @keydown.enter="store.selectHub(h.id)" @keydown.space.prevent="store.selectHub(h.id)">
-        <div class="top">
-          <span class="name">{{ h.name }}</span>
-          <span class="val">{{ h.utilization ?? 0 }}%</span>
+        <div class="body">
+          <div class="top">
+            <span class="name">{{ h.name }}</span>
+            <span class="val">{{ h.utilization ?? 0 }}%</span>
+          </div>
+          <span class="backlog"><em v-if="(h.utilization ?? 0) >= HIGH_UTILIZATION">高负载</em><span class="count"><template v-if="(h.utilization ?? 0) >= HIGH_UTILIZATION"> · </template>积压 {{ fmtInt(h.backlog) }} 件</span></span>
         </div>
-        <span class="backlog"><em v-if="(h.utilization ?? 0) >= HIGH_UTILIZATION">高负载 · </em>积压 {{ fmtInt(h.backlog) }} 件</span>
       </li>
     </ul>
   </Panel>
@@ -68,10 +70,6 @@ onBeforeUnmount(() => observer?.disconnect())
 .tile {
   container-type: size;
   min-width: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 2px;
   padding: 0 10px;
   border-radius: var(--radius-tile);
   background: var(--color-elevated);
@@ -81,7 +79,8 @@ onBeforeUnmount(() => observer?.disconnect())
 .tile:hover { background: var(--color-hover); }
 .tile.hot { border-color: rgba(240, 82, 77, 0.7); }
 .tile.selected { border-color: var(--color-accent); }
-.top { display: flex; align-items: baseline; gap: var(--space-1); min-width: 0; }
+.body { height: 100%; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 2px; }
+.top { display: flex; align-items: baseline; gap: var(--space-1); min-width: 0; line-height: 20px; }
 .name { min-width: 0; font-size: var(--font-small); color: var(--color-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .val {
   flex: none;
@@ -92,8 +91,15 @@ onBeforeUnmount(() => observer?.disconnect())
   font-variant-numeric: tabular-nums;
 }
 .hot .val { color: var(--color-danger); }
-.backlog { min-width: 0; font-size: 11px; color: var(--color-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* 方块高度不足以放两行时只保留利用率，积压数仍在 aria-label 与悬停提示中 */
+.backlog { min-width: 0; font-size: 11px; line-height: 14px; color: var(--color-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .backlog em { font-style: normal; color: var(--color-dangerText); }
-@container (max-height: 46px) { .backlog { display: none; } }
+/* 「高负载」是状态文字，任何高度都保留（不只靠红框表达告警）；可隐藏的只有积压数，
+   积压数仍在 aria-label 与悬停提示中。两行放不下时高负载方块改为单行：利用率后直接跟状态文字 */
+@container (max-height: 35px) {
+  .count { display: none; }
+  .tile:not(.hot) .backlog { display: none; }
+  .hot .body { flex-direction: row; align-items: center; justify-content: flex-start; gap: var(--space-1); }
+  .hot .top { flex: 0 1 auto; }
+  .hot .backlog { flex: none; }
+}
 </style>
