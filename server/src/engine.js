@@ -425,6 +425,8 @@ export function snapshot() {
     type: 'snapshot',
     engineId,
     ts: Date.now(),
+    // 事件游标：客户端订阅时带回，补收快照之后、订阅之前广播掉的事件
+    eventSeq: state.eventSeq,
     vehicleCount: VEHICLE_COUNT,
     vehicles: flatPositions(),
     hubs: serialHubs(true),
@@ -455,6 +457,26 @@ function kpi() {
     onTimeRate: Math.round(state.onTimeRate * 10) / 10,
     pendingAnomalies: pending,
   }
+}
+
+/** 当前事件游标（最后一个事件 id），用于按连接记录已送达位置 */
+export function eventCursor() {
+  return state.eventSeq
+}
+
+/**
+ * 补收：返回 id 大于 sinceEventId 的事件（旧到新），以及在此之前创建但 sinceUpdatedAt 之后有过状态变更的告警。
+ * 事件列表只保留最近 60 条，若游标之前还有已被淘汰的事件则标记 truncated，由客户端提示历史不完整。
+ */
+export function catchUp(sinceEventId, sinceUpdatedAt) {
+  const events = state.history.filter((e) => e.id > sinceEventId).reverse()
+  const oldestKept = state.history.length ? state.history[state.history.length - 1].id : state.eventSeq + 1
+  const truncated = state.history.length >= 60 && sinceEventId + 1 < oldestKept
+  const alertUpdates = []
+  for (const alert of state.alerts.values()) {
+    if (alert.id <= sinceEventId && alert.updatedAt >= sinceUpdatedAt) alertUpdates.push(alert)
+  }
+  return { type: 'catchup', engineId, ts: Date.now(), events, alertUpdates, truncated }
 }
 
 export function delta() {

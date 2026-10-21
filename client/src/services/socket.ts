@@ -1,4 +1,4 @@
-import { useDashboardStore, ALERT_STATUS, type AlertStatus, type DeltaMsg, type SnapshotMsg } from '../stores/dashboard'
+import { useDashboardStore, ALERT_STATUS, type AlertStatus, type CatchupMsg, type DeltaMsg, type SnapshotMsg } from '../stores/dashboard'
 import { ROUTES } from '../data/network'
 import { statusOf, routeOf, kindOf } from './vehicles'
 
@@ -93,6 +93,7 @@ function validStats(value: Record<string, unknown>, fullHubs: boolean) {
     ['modes', 'punctuality', 'routeVolumes'].every(k => named(value[k])) &&
     optional(value.routeOrders, items => Array.isArray(items) && items.length === ROUTES.length && items.every(n => finite(n) && n >= 0)) &&
     Array.isArray(value.hubs) && value.hubs.every(h => validHub(h, fullHubs)) &&
+    optional(value.eventSeq, n => Number.isInteger(n) && (n as number) >= 0) &&
     (events === undefined || Array.isArray(events) && events.every(validEvent)) &&
     optional(value.alertUpdates, items => Array.isArray(items) && items.every(validEvent)) &&
     optional(value.shipments, s => isRecord(s) && Array.isArray(s.stages) && s.stages.length === 5 && s.stages.every(isString) &&
@@ -128,6 +129,12 @@ function isSnapshotMsg(value: unknown): value is SnapshotMsg {
     Array.isArray(value.punctuality) &&
     Array.isArray(value.routeVolumes)
   )
+}
+
+function isCatchupMsg(value: unknown): value is CatchupMsg {
+  return isRecord(value) && value.type === 'catchup' && validTs(value.ts) && typeof value.truncated === 'boolean' &&
+    optional(value.engineId, isString) &&
+    ['events', 'alertUpdates'].every(k => Array.isArray(value[k]) && (value[k] as unknown[]).every(validEvent))
 }
 
 /** 增量包不带车辆数，按快照建立的车辆数校验：少一台都当坏包 */
@@ -174,6 +181,8 @@ function connectWs() {
     reconnectAttempt = 0
     store.reconnectAttempt = 0
     store.setConnectionState('connected')
+    // 带快照游标订阅：引擎补发快照之后、订阅之前广播掉的事件与告警变更，首次接入和每次重连都不漏
+    socket.send(JSON.stringify({ type: 'subscribe', sinceEventId: store.eventCursor, sinceUpdatedAt: store.alertCursor }))
   }
   ws.onmessage = (ev) => {
     if (stopped || session !== generation) return
@@ -181,8 +190,10 @@ function connectWs() {
       const msg: unknown = JSON.parse(ev.data as string)
       if (isDeltaMsg(msg, store.vehicleCount)) {
         store.applyDelta(msg, (ev.data as string).length / 1024)
-      } else if (isRecord(msg) && msg.type === 'delta') {
-        throw new Error('增量数据格式不正确')
+      } else if (isCatchupMsg(msg)) {
+        store.applyCatchup(msg)
+      } else if (isRecord(msg) && (msg.type === 'delta' || msg.type === 'catchup')) {
+        throw new Error(msg.type === 'delta' ? '增量数据格式不正确' : '补收数据格式不正确')
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : '未知解析错误'
