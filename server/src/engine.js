@@ -305,6 +305,60 @@ export function step(dtMs) {
   }
 }
 
+// 历史帧：每 HISTORY_INTERVAL 存一帧全部车辆位置（Int32：经纬度 × 1e5、状态码），环形保留 1 小时。
+// 每帧 12000 × 3 × 4 = 144 KB，360 帧约 52 MB（TypedArray 不占 V8 堆）；回放按帧取，尾迹按车辆下标跨帧取。
+export const HISTORY_INTERVAL = 10_000
+export const HISTORY_FRAMES = 360
+const history = []
+const SCALE = 1e5
+
+export function recordHistoryFrame(ts = Date.now()) {
+  const data = new Int32Array(VEHICLE_COUNT * 3)
+  for (let i = 0; i < VEHICLE_COUNT; i++) {
+    const [lng, lat] = vehiclePos(vehicles[i])
+    data[i * 3] = Math.round(lng * SCALE)
+    data[i * 3 + 1] = Math.round(lat * SCALE)
+    data[i * 3 + 2] = vehicles[i].status * ROUTE_CODE + vehicles[i].routeIdx
+  }
+  const k = kpi()
+  history.push({ ts, data, kpi: { enRoute: k.enRoute, pendingAnomalies: k.pendingAnomalies } })
+  if (history.length > HISTORY_FRAMES) history.shift()
+  return history.length
+}
+
+/** 可回放的帧时间戳列表（旧到新） */
+export function historyIndex() {
+  return { interval: HISTORY_INTERVAL, frames: history.map((f) => f.ts) }
+}
+
+/** 取某一帧：ts 取最接近的一帧（相差不超过一个间隔），返回与实时同构的扁平数组 */
+export function historyFrame(ts) {
+  if (!history.length) return null
+  let best = history[0]
+  for (const frame of history) if (Math.abs(frame.ts - ts) < Math.abs(best.ts - ts)) best = frame
+  if (Math.abs(best.ts - ts) > HISTORY_INTERVAL) return null
+  const vehiclesOut = new Array(best.data.length)
+  for (let i = 0; i < best.data.length; i += 3) {
+    vehiclesOut[i] = best.data[i] / SCALE
+    vehiclesOut[i + 1] = best.data[i + 1] / SCALE
+    vehiclesOut[i + 2] = best.data[i + 2]
+  }
+  return { ts: best.ts, vehicleCount: VEHICLE_COUNT, vehicles: vehiclesOut, kpi: best.kpi }
+}
+
+/** 单车尾迹：最近 sinceMs 内各历史帧里该车的位置 [ts, lng, lat, status]，旧到新 */
+export function vehicleTrail(plate, sinceMs = 3_600_000) {
+  const index = vehicles.findIndex((v) => v.plate === plate)
+  if (index < 0) return null
+  const from = Date.now() - sinceMs
+  const points = []
+  for (const frame of history) {
+    if (frame.ts < from) continue
+    points.push([frame.ts, frame.data[index * 3] / SCALE, frame.data[index * 3 + 1] / SCALE, Math.floor(frame.data[index * 3 + 2] / ROUTE_CODE)])
+  }
+  return { plate, interval: HISTORY_INTERVAL, points }
+}
+
 function flatPositions() {
   const arr = new Array(VEHICLE_COUNT * 3)
   for (let i = 0; i < VEHICLE_COUNT; i++) {

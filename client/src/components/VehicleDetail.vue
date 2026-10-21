@@ -4,6 +4,7 @@ import { useDashboardStore } from '../stores/dashboard'
 import { useFocus } from '../services/useFocus'
 import { hubById } from '../data/network'
 import { fetchVehicle } from '../services/vehicles'
+import { fetchVehicleTrail } from '../services/history'
 import { fmtInt } from '../services/format'
 
 // 车辆抽屉：详情由 /vehicles/:plate 每 2 秒轮询（速度、朝向、里程、ETA），位置由地图按 1Hz 增量包下标跟随
@@ -63,10 +64,26 @@ function stop() {
   controller = undefined
 }
 
+// 尾迹：选中时拉一次最近 1 小时（10 秒一帧），之后由 store 按 1Hz 增量追加
+async function loadTrail(value: string) {
+  try {
+    const trail = await fetchVehicleTrail(value)
+    if (plate.value === value) store.trail = { plate: value, points: trail.points }
+  } catch (error) {
+    if (plate.value === value) store.notify(`尾迹加载失败：${(error as Error).message}`)
+  }
+}
+const trailMinutes = computed(() => {
+  const points = store.trail?.points
+  if (!points?.length || store.trail?.plate !== plate.value) return 0
+  return Math.max(1, Math.round((points[points.length - 1]![0] - points[0]![0]) / 60_000))
+})
+
 watch(plate, (value) => {
   stop()
   if (!value) return
   void poll()
+  void loadTrail(value)
   timer = window.setInterval(() => { if (!document.hidden) void poll() }, POLL_MS)
 }, { immediate: true })
 onBeforeUnmount(stop)
@@ -110,6 +127,7 @@ onBeforeUnmount(stop)
       <p class="coords" :title="`${detail.position[0].toFixed(5)}, ${detail.position[1].toFixed(5)}（WGS84）`">
         {{ detail.position[0].toFixed(4) }}°E {{ detail.position[1].toFixed(4) }}°N · 沿真实公路折线行驶，仿真 60× 加速
       </p>
+      <p class="coords">{{ trailMinutes ? `地图尾迹：最近 ${trailMinutes} 分钟（10 秒一帧，选中后按秒追加）` : '尾迹加载中…' }}{{ store.playback.on ? ' · 回放中：箭头与尾迹为历史帧，以上详情为实时' : '' }}</p>
     </template>
   </section>
 </template>

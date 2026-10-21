@@ -2,8 +2,9 @@ import { defineStore } from 'pinia'
 import type { Hub } from '../data/network'
 import { HUBS, ROUTES, hubById } from '../data/network'
 import { provinceName } from '../data/provinces'
-import { statusOf, routeOf, type VehicleDetail } from '../services/vehicles'
+import { statusOf, routeOf, indexOfPlate, type VehicleDetail } from '../services/vehicles'
 import { postAlertStatus } from '../services/alerts'
+import type { TrailPoint } from '../services/history'
 
 export type LayerKey = 'routes' | 'enroute' | 'dwell' | 'anomaly' | 'hubs' | 'alerts'
 export const LAYER_KEYS: LayerKey[] = ['routes', 'enroute', 'dwell', 'anomaly', 'hubs', 'alerts']
@@ -150,6 +151,22 @@ export const useDashboardStore = defineStore('dashboard', {
     alertFilter: 'pending' as 'pending' | 'all',
     /** 正在提交处置的告警 id，防止重复点击 */
     alertBusy: new Set<number>(),
+    /** 历史回放：on 时地图改画 frame（与实时同构的扁平数组），实时数据继续在后台更新 */
+    playback: {
+      on: false,
+      frames: [] as number[],
+      interval: 10_000,
+      index: 0,
+      playing: false,
+      fps: 3,
+      frame: null as number[] | null,
+      frameTs: 0,
+      frameKpi: null as { enRoute: number; pendingAnomalies: number } | null,
+      loading: false,
+      error: '',
+    },
+    /** 选中车辆的尾迹：服务端最近 1 小时各帧位置 + 选中后按 1Hz 增量追加 */
+    trail: null as { plate: string; points: TrailPoint[] } | null,
     selectedHubId: null as string | null,
     activeEvent: null as AnomalyEvent | null,
     /** 选中追踪的车牌；详情由 /vehicles/:plate 轮询，位置在增量包里按下标读取 */
@@ -233,6 +250,7 @@ export const useDashboardStore = defineStore('dashboard', {
       this.dataAt = msg.ts
       this.vehicles = msg.vehicles
       this.routeFleet = countFleet(msg.vehicles)
+      this.appendTrail(msg.ts, msg.vehicles)
       // 网点统计按 id 合并，不整表替换（保留对象引用稳定）
       const byId = new Map(this.hubs.map((h) => [h.id, h]))
       for (const hs of msg.hubs) {
@@ -265,13 +283,40 @@ export const useDashboardStore = defineStore('dashboard', {
         this.notify('已切换全国视图定位该网点')
       }
     },
-    /** 选中车辆：清除网点与事件选择；详情由 VehicleDetail 轮询填充 */
+    /** 选中车辆：清除网点与事件选择；详情由 VehicleDetail 轮询填充，尾迹由其拉取 */
     selectVehicle(plate: string | null) {
       if (plate === this.selectedPlate) return
       if (plate) { this.selectedHubId = null; this.activeEvent = null; this.selectedRouteIndex = null }
       this.selectedPlate = plate
       this.vehicle = null
       this.vehicleError = ''
+      this.trail = null
+      this.mapVersion++
+    },
+    /** 增量到达时给选中车辆的尾迹追加一个 1Hz 点（最多保留 1 小时） */
+    appendTrail(ts: number, flat: number[]) {
+      const trail = this.trail
+      if (!trail || trail.plate !== this.selectedPlate) return
+      const index = indexOfPlate(trail.plate, this.vehicleCount)
+      if (index < 0 || flat.length < (index + 1) * 3) return
+      const code = flat[index * 3 + 2]!
+      trail.points.push([ts, flat[index * 3]!, flat[index * 3 + 1]!, statusOf(code)])
+      const cutoff = ts - 3_600_000
+      while (trail.points.length && trail.points[0]![0] < cutoff) trail.points.shift()
+      if (trail.points.length > 4000) trail.points.splice(0, trail.points.length - 4000)
+    },
+    setPlayback(on: boolean) {
+      this.playback.on = on
+      this.playback.playing = false
+      this.playback.loading = false
+      this.playback.error = ''
+      if (!on) { this.playback.frame = null; this.playback.frameTs = 0; this.playback.frameKpi = null }
+      this.mapVersion++
+    },
+    applyPlaybackFrame(ts: number, vehicles: number[], kpi: { enRoute: number; pendingAnomalies: number }) {
+      this.playback.frame = vehicles
+      this.playback.frameTs = ts
+      this.playback.frameKpi = kpi
       this.mapVersion++
     },
     /** 选中干线：清除网点 / 车辆 / 事件选择；线路不在当前省内时回到全国 */

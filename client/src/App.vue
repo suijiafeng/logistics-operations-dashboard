@@ -12,6 +12,7 @@ import EventStream from './components/EventStream.vue'
 import WarehousePanel from './components/WarehousePanel.vue'
 import RouteRank from './components/RouteRank.vue'
 import Hud from './components/Hud.vue'
+import Timeline from './components/Timeline.vue'
 import { startDataFeed, stopDataFeed } from './services/socket'
 import { useDashboardStore } from './stores/dashboard'
 import FeedNotice from './components/FeedNotice.vue'
@@ -80,6 +81,7 @@ onBeforeUnmount(() => {
           <HubDetail />
           <VehicleDetail />
           <RouteDetail />
+          <Timeline />
           <Hud />
         </MapChart>
         <div class="col right">

@@ -73,6 +73,13 @@ const LAYER_ROWS: { key: LayerKey; label: string; dot: string }[] = [
 ]
 const legendTotal = computed(() => statusCounts.value[0] + statusCounts.value[1] + statusCounts.value[2])
 const drawerOpen = computed(() => store.hasData && (!!store.selectedHub || !!store.selectedPlate || store.selectedRouteIndex !== null))
+/** 当前要画的车辆数组：回放时为历史帧，否则为实时增量 */
+function activeFlat() {
+  return store.playback.on && store.playback.frame ? store.playback.frame : store.vehicles
+}
+const playbackLabel = computed(() => store.playback.on && store.playback.frameTs
+  ? `回放 ${new Date(store.playback.frameTs).toLocaleTimeString('zh-CN', { hour12: false, timeZone: 'Asia/Shanghai' })} · `
+  : '')
 
 // 干线按今日单量四分位分级：粗细与颜色随单量递增；选中某条线时其余线路与线外车辆淡出
 const GRADE_STYLE = [
@@ -110,7 +117,7 @@ function visibleHubs() {
  *  选中干线时，线上车辆进三组正常散点，线外车辆并入第四组淡化散点 */
 function vehicleSeriesData(limit: number) {
   const groups: [number, number, number][][] = [[], [], [], []]
-  const flat = store.vehicles
+  const flat = activeFlat()
   const total = Math.min(limit, store.vehicleCount, Math.floor(flat.length / 3))
   const budget = store.quality === 'full' ? total : store.quality === 'balanced' ? 6000 : 3000
   const stride = Math.max(1, Math.ceil(total / budget))
@@ -144,7 +151,7 @@ function renderVehicles(limit = Number.POSITIVE_INFINITY) {
   store.renderedVehicles = groups.reduce((sum, group) => sum + group.length, 0)
   // 增量更新：只替换三组车辆散点与追踪标记的数据，不重建整个 option
   c.setOption({
-    series: [...groups.map((data, s) => ({ id: VEHICLE_SERIES_IDS[s], data })), { id: 'vehicle-focus', data: vehicleFocusData() }],
+    series: [...groups.map((data, s) => ({ id: VEHICLE_SERIES_IDS[s], data })), { id: 'vehicle-focus', data: vehicleFocusData() }, { id: 'vehicle-trail', data: trailData() }],
   })
 }
 
@@ -294,7 +301,8 @@ const ALERT_SYMBOL = ['circle', 'diamond', 'pin']
 const ALERT_SIZE = [7, 10, 16]
 const ALERT_COLOR = [COLORS.secondary, COLORS.warning, RED]
 function alertMarkData() {
-  if (!store.layers.alerts) return []
+  // 回放时地图是历史位置，当前告警标记会对不上，不画
+  if (!store.layers.alerts || store.playback.on) return []
   return store.events.filter((e) => isAlertOpen(e) && e.position && e.id !== store.activeEvent?.id && inView(e.position[0], e.position[1]))
     .map((e) => ({
       name: e.vehicle, eventId: e.id, value: e.position,
@@ -322,8 +330,9 @@ function vehiclePosition(): [number, number, number] | undefined {
   const plate = store.selectedPlate
   if (!plate) return undefined
   const index = indexOfPlate(plate, store.vehicleCount)
-  if (index >= 0 && store.vehicles.length >= (index + 1) * 3) {
-    return [store.vehicles[index * 3]!, store.vehicles[index * 3 + 1]!, statusOf(store.vehicles[index * 3 + 2]!)]
+  const flat = activeFlat()
+  if (index >= 0 && flat.length >= (index + 1) * 3) {
+    return [flat[index * 3]!, flat[index * 3 + 1]!, statusOf(flat[index * 3 + 2]!)]
   }
   const d = store.vehicle
   return d ? [d.position[0], d.position[1], d.status] : undefined
@@ -339,6 +348,24 @@ function vehicleFocusData() {
     symbolRotate: -(store.vehicle?.heading ?? 0),
     itemStyle: { color: status === 2 ? RED : ACCENT },
   }]
+}
+
+/** 选中车辆尾迹：按时间分 12 段、透明度由旧到新递增；回放时只画到当前帧，实时时画到现在 */
+const TRAIL_SEGMENTS = 12
+function trailData() {
+  const trail = store.trail
+  if (!trail || trail.plate !== store.selectedPlate || trail.points.length < 2) return []
+  const cutoff = store.playback.on ? store.playback.frameTs || 0 : Number.POSITIVE_INFINITY
+  const points = trail.points.filter((p) => p[0] <= cutoff && inView(p[1], p[2]))
+  if (points.length < 2) return []
+  const per = Math.max(2, Math.ceil(points.length / TRAIL_SEGMENTS))
+  const segments: { coords: number[][]; lineStyle: { opacity: number } }[] = []
+  for (let start = 0; start < points.length - 1; start += per - 1) {
+    const chunk = points.slice(start, start + per).map((p) => [p[1], p[2]])
+    if (chunk.length < 2) break
+    segments.push({ coords: chunk, lineStyle: { opacity: 0.25 + 0.7 * (start + per) / points.length } })
+  }
+  return segments
 }
 
 function vehicleRouteData() {
@@ -380,6 +407,7 @@ function updateSelection() {
     { id: 'alert-marks', data: alertMarkData() },
     { id: 'vehicle-route', data: vehicleRouteData() },
     { id: 'vehicle-focus', data: vehicleFocusData() },
+    { id: 'vehicle-trail', data: trailData() },
     { id: 'route-focus', data: routeFocusData() },
   ] })
   // 地图已让出右侧空间，抽屉固定在右侧
@@ -530,6 +558,12 @@ function baseOption() {
         data: vehicleRouteData(),
       },
       {
+        // 追踪车辆尾迹：最近 1 小时（10 秒一帧）+ 选中后的 1Hz 轨迹，分段渐隐
+        id: 'vehicle-trail', type: 'lines', coordinateSystem: 'geo', zlevel: 5, z: 2,
+        polyline: true, silent: true, lineStyle: { color: COLORS.accentText, width: 2.5, opacity: 0.9, cap: 'round', join: 'round' },
+        data: trailData(),
+      },
+      {
         // 追踪车辆：箭头按行驶朝向旋转，位置每秒随增量包更新
         id: 'vehicle-focus', type: 'effectScatter', coordinateSystem: 'geo', zlevel: 6,
         symbol: 'arrow', symbolSize: 18, rippleEffect: { brushType: 'stroke', scale: 2.4, color: ACCENT },
@@ -587,9 +621,9 @@ function nearestVehicle(x: number, y: number, radius: number) {
   if (!origin || !dx || !dy) return -1
   const tolLng = Math.abs(dx[0] - origin[0]), tolLat = Math.abs(dy[1] - origin[1])
   if (!tolLng || !tolLat) return -1
-  const flat = store.vehicles
   const on = STATUS_LAYER.map((key) => store.layers[key])
   let best = -1, bestDist = Number.POSITIVE_INFINITY
+  const flat = activeFlat()
   for (let i = 0; i < store.vehicleCount; i++) {
     const status = statusOf(flat[i * 3 + 2]!)
     if (!on[status]) continue
@@ -715,6 +749,8 @@ onBeforeUnmount(() => {
 })
 
 watch([() => store.selectedHubId, () => store.activeEvent, () => store.selectedPlate, () => store.vehicle, coarse], updateSelection)
+// 尾迹拉取完成 / 回放开关切换时重画尾迹与标记
+watch([() => store.trail, () => store.playback.on], () => { updateSelection(); scheduleVehicleRender() })
 // 告警到达 / 处置 / 关闭时刷新地图标记（事件列表引用变化即触发）
 watch(() => store.events, () => { if (chart.value) chart.value.setOption({ series: [{ id: 'alert-marks', data: alertMarkData() }] }) })
 // 选中干线：线路淡出 / 高亮与线外车辆淡化一起更新；单量分级变化（跨四分位）时重画线路
@@ -776,7 +812,7 @@ watch(
       <figcaption>南海诸岛</figcaption>
     </figure>
     <div v-if="store.hasData" class="map-legend" role="group" aria-label="图层开关">
-      <p class="legend-title">{{ store.view === 'china' ? '共' : `${store.viewName}内` }} {{ fmtInt(legendTotal) }} 台 · 点击切换图层</p>
+      <p class="legend-title">{{ playbackLabel }}{{ store.view === 'china' ? '共' : `${store.viewName}内` }} {{ fmtInt(legendTotal) }} 台 · 点击切换图层</p>
       <ul>
         <li v-for="row in LAYER_ROWS" :key="row.key">
           <button type="button" class="layer" :class="{ off: !store.layers[row.key] }" :aria-pressed="store.layers[row.key]"
@@ -893,7 +929,7 @@ watch(
   position: absolute;
   left: var(--space-4);
   bottom: var(--space-4);
-  min-width: 176px;
+  width: 204px;
   max-width: calc(100% - 32px);
   padding: 8px 6px 6px;
   background: var(--color-legend);

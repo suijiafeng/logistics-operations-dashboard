@@ -3,7 +3,7 @@
 import http from 'node:http'
 import zlib from 'node:zlib'
 import { WebSocketServer } from 'ws'
-import { step, snapshot, delta, vehicleDetail, updateAlert, ALERT_STATUS } from './engine.js'
+import { step, snapshot, delta, vehicleDetail, updateAlert, ALERT_STATUS, recordHistoryFrame, historyIndex, historyFrame, vehicleTrail, HISTORY_INTERVAL } from './engine.js'
 
 const PORT = process.env.PORT || 8787
 const configuredMaxBuffered = Number(process.env.WS_MAX_BUFFERED_BYTES || 1_000_000)
@@ -66,12 +66,39 @@ const server = http.createServer((req, res) => {
     }
     return
   }
-  // 单车详情按需查询：/vehicles/粤A·10000（URL 编码），不进 1Hz 增量包
-  if (req.url?.startsWith('/vehicles/')) {
-    let plate = ''
-    try { plate = decodeURIComponent(req.url.slice('/vehicles/'.length).split('?')[0]) } catch { plate = '' }
-    const detail = plate ? vehicleDetail(plate) : null
+  // 历史回放：/history 帧列表；/history/:ts 某一帧全量位置（gzip）；尾迹见 /vehicles/:plate/trail
+  if (req.url === '/history') {
     res.setHeader('Content-Type', 'application/json')
+    res.end(JSON.stringify(historyIndex()))
+    return
+  }
+  const frameMatch = req.url?.match(/^\/history\/(\d+)$/)
+  if (frameMatch) {
+    const frame = historyFrame(Number(frameMatch[1]))
+    res.setHeader('Content-Type', 'application/json')
+    if (!frame) { res.statusCode = 404; res.end(JSON.stringify({ error: 'frame_not_found' })); return }
+    const body = JSON.stringify(frame)
+    if (/\bgzip\b/.test(String(req.headers['accept-encoding'] || ''))) {
+      res.setHeader('Content-Encoding', 'gzip')
+      res.end(zlib.gzipSync(body, { level: 1 }))
+    } else res.end(body)
+    return
+  }
+  // 单车详情按需查询：/vehicles/粤A·10000（URL 编码），不进 1Hz 增量包；/vehicles/:plate/trail 为最近 1 小时尾迹
+  if (req.url?.startsWith('/vehicles/')) {
+    const [path, query] = req.url.slice('/vehicles/'.length).split('?')
+    const [rawPlate, sub] = path.split('/')
+    let plate = ''
+    try { plate = decodeURIComponent(rawPlate ?? '') } catch { plate = '' }
+    res.setHeader('Content-Type', 'application/json')
+    if (sub === 'trail') {
+      const minutes = Math.min(60, Math.max(1, Number(new URLSearchParams(query).get('minutes')) || 60))
+      const trail = plate ? vehicleTrail(plate, minutes * 60_000) : null
+      if (!trail) { res.statusCode = 404; res.end(JSON.stringify({ error: 'vehicle_not_found' })); return }
+      res.end(JSON.stringify(trail))
+      return
+    }
+    const detail = plate ? vehicleDetail(plate) : null
     if (!detail) { res.statusCode = 404; res.end(JSON.stringify({ error: 'vehicle_not_found' })); return }
     res.end(JSON.stringify({ ...detail, ts: Date.now() }))
     return
@@ -98,6 +125,9 @@ wss.on('error', (error) => console.error('[ws] server error', error))
 
 // 仿真步进
 setInterval(() => step(250), 250)
+// 历史帧：启动即记第一帧，之后每 10 秒一帧，环形保留 1 小时
+recordHistoryFrame()
+setInterval(() => recordHistoryFrame(), HISTORY_INTERVAL)
 
 // 1 秒聚合广播
 let lastBytes = 0
