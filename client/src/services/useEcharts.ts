@@ -1,5 +1,5 @@
 import { onBeforeUnmount, onMounted, ref, shallowRef, watch, type Ref, type ShallowRef } from 'vue'
-import * as echarts from 'echarts'
+import echarts, { type EChartsType } from './echarts'
 import { COLORS, FONT } from '../design/tokens'
 import { useChartMotion } from './useChartMotion'
 import { useDashboardStore } from '../stores/dashboard'
@@ -8,9 +8,9 @@ const POINTER_EVENTS = ['mousedown', 'mouseup', 'mousemove', 'mouseout', 'mouseo
   'wheel', 'mousewheel', 'pointerdown', 'pointerup', 'pointermove', 'pointerout', 'pointerover', 'pointercancel']
 
 /** 通用 ECharts 挂载：初始化、窗口 resize、卸载销毁（实例用 shallowRef，避免被响应式深代理） */
-export function useEcharts(): { el: Ref<HTMLDivElement | null>; chart: ShallowRef<echarts.EChartsType | null> } {
+export function useEcharts(): { el: Ref<HTMLDivElement | null>; chart: ShallowRef<EChartsType | null> } {
   const el = ref<HTMLDivElement | null>(null)
-  const chart = shallowRef<echarts.EChartsType | null>(null)
+  const chart = shallowRef<EChartsType | null>(null)
   const motion = useChartMotion()
   const store = useDashboardStore()
   let observer: ResizeObserver | undefined

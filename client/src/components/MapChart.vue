@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import * as echarts from 'echarts'
+import echarts from '../services/echarts'
 import { useEcharts, ACCENT, RED, TOOLTIP, TEXT } from '../services/useEcharts'
 import { COLORS, FONT } from '../design/tokens'
 import { useChartMotion } from '../services/useChartMotion'
