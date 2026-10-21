@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { useDashboardStore } from '../stores/dashboard'
 
-// 性能 HUD：rAF 统计 FPS 与平均帧耗时，同时展示数据链路指标（点位、增量包大小、推送延迟）
+// 性能 HUD：rAF 统计 FPS 与平均帧间隔（相邻 rAF 回调的间隔，含刷新率等待，不是图表绘制 CPU/GPU 耗时），
+// 同时展示数据链路指标（点位、增量包大小、推送延迟）
 // 所有数字都是本机实时测得，不做任何预设
 const store = useDashboardStore()
 </script>
@@ -10,7 +11,7 @@ const store = useDashboardStore()
   <div v-if="store.hudOn" class="hud">
     <div class="hud-title">性能监测（本机实测）</div>
     <div class="row"><span>FPS</span><b>{{ store.fps }}</b></div>
-    <div class="row"><span>平均帧耗时</span><b>{{ store.frameMs }} ms</b></div>
+    <div class="row" title="相邻动画帧回调的平均间隔，含刷新率等待；不是单帧绘制成本"><span>平均帧间隔</span><b>{{ store.frameMs }} ms</b></div>
     <div class="row"><span>车辆点位</span><b>{{ store.hasData ? store.vehicleCount.toLocaleString('zh-CN') : '—' }}</b></div>
     <div class="row"><span>本视图渲染</span><b>{{ store.renderedVehicles.toLocaleString('zh-CN') }}</b></div>
     <div class="row"><span>画质 / DPR</span><b>{{ store.quality }} / {{ +store.renderDpr.toFixed(2) }}</b></div>

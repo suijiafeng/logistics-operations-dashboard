@@ -171,12 +171,25 @@ async function loadSnapshot() {
   }
 }
 
+// 应用层握手期限：TCP 连上但 WS 升级一直不完成时（半开、中间设备吞包），浏览器原生超时很长且不可控；
+// 到期主动关闭这个 socket 走退避重连，看门狗只看已连接后的数据新鲜度，覆盖不到这一段
+const HANDSHAKE_TIMEOUT_MS = 10_000
+
 function connectWs() {
   const store = useDashboardStore()
   const socket = new WebSocket(websocketUrl())
   ws = socket
   const session = generation
+  const handshake = window.setTimeout(() => {
+    if (ws !== socket || socket.readyState === WebSocket.OPEN) return
+    ws = null
+    socket.onclose = null
+    socket.onerror = null
+    socket.close()
+    if (!stopped && session === generation) scheduleReconnect('实时连接握手超时')
+  }, HANDSHAKE_TIMEOUT_MS)
   ws.onopen = () => {
+    window.clearTimeout(handshake)
     if (stopped || session !== generation) { socket.close(); return }
     reconnectAttempt = 0
     store.reconnectAttempt = 0
@@ -202,6 +215,7 @@ function connectWs() {
     }
   }
   ws.onclose = () => {
+    window.clearTimeout(handshake)
     if (ws !== socket) return
     ws = null
     if (!stopped) scheduleReconnect('实时连接已断开')
