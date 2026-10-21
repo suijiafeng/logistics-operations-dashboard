@@ -1,14 +1,18 @@
 // 仿真引擎：12000 台车辆沿干线真实道路折线运行（几何见 routes.js，由 OSRM 离线生成）
 // 状态机：EN_ROUTE（在途） → DWELL（到站装卸） → EN_ROUTE（换线） ；在途随机进入 ANOMALY（异常）
 // 车辆以公里为位置、km/h 为速度，仿真时钟按 TIME_SCALE 加速（1 真实秒 = 60 仿真秒），长途线路也能在几分钟内看到车辆走完。
-// 内部步进 250ms，聚合 1s 后批量推送 delta；车辆位置用扁平数组编码（[lng, lat, status] * N），不用对象数组，减小包体。
+// 内部步进 250ms，聚合 1s 后批量推送 delta；车辆位置用扁平数组编码（[lng, lat, code] * N），不用对象数组，减小包体；
+// code = status × 100 + 线路下标，客户端据此按线路筛选车辆（线路不超过 100 条）。
 
 import { HUBS, ROUTES, hubById } from './network.js'
 import { routeKm, pointAtKm, headingAtKm } from './routes.js'
 import { readMetrics, readModes, readHubHistory, readYesterdayTrend } from './metrics.js'
 
 export const VEHICLE_COUNT = 12000
+/** 扁平数组第三位：状态 × ROUTE_CODE + 线路下标 */
+export const ROUTE_CODE = 100
 const STATUS = { EN_ROUTE: 0, DWELL: 1, ANOMALY: 2 }
+if (ROUTES.length > ROUTE_CODE) throw new Error(`线路数 ${ROUTES.length} 超过编码上限 ${ROUTE_CODE}`)
 
 /** 仿真加速倍数：1 真实秒推进 60 仿真秒 */
 export const TIME_SCALE = 60
@@ -224,7 +228,7 @@ function flatPositions() {
     // 保留 5 位小数（约 1 米）：车辆沿真实道路行驶，城市级视图下 3 位小数会让车辆离开路面
     arr[i * 3] = Math.round(lng * 1e5) / 1e5
     arr[i * 3 + 1] = Math.round(lat * 1e5) / 1e5
-    arr[i * 3 + 2] = vehicles[i].status
+    arr[i * 3 + 2] = vehicles[i].status * ROUTE_CODE + vehicles[i].routeIdx
   }
   return arr
 }
@@ -265,6 +269,8 @@ export function snapshot() {
     modes: readModes(),
     punctuality: state.punctuality.map((p) => ({ ...p })),
     routeVolumes: routeVolumes(),
+    // 全部干线今日单量（ROUTES 顺序），供地图按单量分级与线路详情使用；排行仍只取前 8
+    routeOrders: [...metrics.routes],
     events: state.history.slice(0, 30),
   }
 }
@@ -299,6 +305,7 @@ export function delta() {
     modes: readModes(),
     punctuality: state.punctuality.map((p) => ({ ...p })),
     routeVolumes: routeVolumes(),
+    routeOrders: [...metrics.routes],
     events,
   }
 }

@@ -21,5 +21,6 @@ export function useFocus() {
     focusHub(id: string) { store.selectHub(id); revealMap() },
     locateEvent(event: AnomalyEvent) { store.locateEvent(event); revealMap() },
     focusVehicle(plate: string) { store.selectVehicle(plate); revealMap() },
+    focusRoute(index: number) { store.selectRoute(index); revealMap() },
   }
 }

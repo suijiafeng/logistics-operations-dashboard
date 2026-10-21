@@ -18,6 +18,10 @@ export interface VehicleDetail {
 }
 
 export const PLATE_BASE = 10000
+/** 扁平数组第三位 = 状态 × ROUTE_CODE + 线路下标（与引擎一致） */
+export const ROUTE_CODE = 100
+export function statusOf(code: number) { return Math.floor(code / ROUTE_CODE) }
+export function routeOf(code: number) { return code % ROUTE_CODE }
 
 export function plateOf(index: number) { return `粤A·${PLATE_BASE + index}` }
 

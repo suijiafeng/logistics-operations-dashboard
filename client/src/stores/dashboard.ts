@@ -1,8 +1,8 @@
 import { defineStore } from 'pinia'
 import type { Hub } from '../data/network'
-import { HUBS, hubById } from '../data/network'
+import { HUBS, ROUTES, hubById } from '../data/network'
 import { provinceName } from '../data/provinces'
-import type { VehicleDetail } from '../services/vehicles'
+import { statusOf, routeOf, type VehicleDetail } from '../services/vehicles'
 
 export type LayerKey = 'routes' | 'enroute' | 'dwell' | 'anomaly' | 'hubs'
 export const LAYER_KEYS: LayerKey[] = ['routes', 'enroute', 'dwell', 'anomaly', 'hubs']
@@ -58,6 +58,7 @@ export interface SnapshotMsg {
   modes: NameValue[]
   punctuality: NameValue[]
   routeVolumes: NameValue[]
+  routeOrders?: number[]
 }
 
 export interface DeltaMsg {
@@ -72,7 +73,18 @@ export interface DeltaMsg {
   modes: NameValue[]
   punctuality: NameValue[]
   routeVolumes: NameValue[]
+  routeOrders?: number[]
   events: AnomalyEvent[]
+}
+
+function countFleet(flat: number[]): [number, number, number][] {
+  const fleet = ROUTES.map(() => [0, 0, 0] as [number, number, number])
+  for (let i = 2; i < flat.length; i += 3) {
+    const code = flat[i]!
+    const route = fleet[routeOf(code)], status = statusOf(code)
+    if (route && status >= 0 && status <= 2) route[status as 0 | 1 | 2]++
+  }
+  return fleet
 }
 
 export const useDashboardStore = defineStore('dashboard', {
@@ -100,10 +112,16 @@ export const useDashboardStore = defineStore('dashboard', {
     modes: [] as NameValue[],
     punctuality: [] as NameValue[],
     routeVolumes: [] as NameValue[],
+    /** 全部干线今日单量，ROUTES 顺序 */
+    routeOrders: [] as number[],
+    /** 每条干线当前车辆数 [在途, 装卸, 异常]，由扁平数组解码统计 */
+    routeFleet: [] as [number, number, number][],
     events: [] as AnomalyEvent[],
     selectedHubId: null as string | null,
     activeEvent: null as AnomalyEvent | null,
     /** 选中追踪的车牌；详情由 /vehicles/:plate 轮询，位置在增量包里按下标读取 */
+    /** 选中的干线下标：地图高亮该线并只突出线上车辆 */
+    selectedRouteIndex: null as number | null,
     selectedPlate: null as string | null,
     vehicle: null as VehicleDetail | null,
     vehicleError: '',
@@ -161,6 +179,7 @@ export const useDashboardStore = defineStore('dashboard', {
       this.dataAt = msg.ts
       this.vehicleCount = msg.vehicleCount
       this.vehicles = msg.vehicles
+      this.routeFleet = countFleet(msg.vehicles)
       this.hubs = msg.hubs
       this.kpi = msg.kpi
       this.trend = msg.trend
@@ -168,6 +187,7 @@ export const useDashboardStore = defineStore('dashboard', {
       this.modes = msg.modes
       this.punctuality = msg.punctuality
       this.routeVolumes = msg.routeVolumes
+      if (msg.routeOrders) this.routeOrders = msg.routeOrders
       if (msg.events) this.mergeEvents(msg.events)
       this.mapVersion++
       this.chartVersion++
@@ -178,6 +198,7 @@ export const useDashboardStore = defineStore('dashboard', {
       this.connectionError = ''
       this.dataAt = msg.ts
       this.vehicles = msg.vehicles
+      this.routeFleet = countFleet(msg.vehicles)
       // 网点统计按 id 合并，不整表替换（保留对象引用稳定）
       const byId = new Map(this.hubs.map((h) => [h.id, h]))
       for (const hs of msg.hubs) {
@@ -190,6 +211,7 @@ export const useDashboardStore = defineStore('dashboard', {
       this.modes = msg.modes
       this.punctuality = msg.punctuality
       this.routeVolumes = msg.routeVolumes
+      if (msg.routeOrders) this.routeOrders = msg.routeOrders
       this.mergeEvents(msg.events)
       this.lastDeltaKB = payloadKB
       this.latencyMs = Math.max(0, Date.now() - msg.ts)
@@ -201,6 +223,7 @@ export const useDashboardStore = defineStore('dashboard', {
     selectHub(id: string | null) {
       this.activeEvent = null
       this.selectVehicle(null)
+      if (id) this.selectedRouteIndex = null
       this.selectedHubId = id
       if (id && this.view !== 'china' && hubById[id]?.province !== this.view) {
         this.setView('china')
@@ -210,10 +233,22 @@ export const useDashboardStore = defineStore('dashboard', {
     /** 选中车辆：清除网点与事件选择；详情由 VehicleDetail 轮询填充 */
     selectVehicle(plate: string | null) {
       if (plate === this.selectedPlate) return
-      if (plate) { this.selectedHubId = null; this.activeEvent = null }
+      if (plate) { this.selectedHubId = null; this.activeEvent = null; this.selectedRouteIndex = null }
       this.selectedPlate = plate
       this.vehicle = null
       this.vehicleError = ''
+      this.mapVersion++
+    },
+    /** 选中干线：清除网点 / 车辆 / 事件选择；线路不在当前省内时回到全国 */
+    selectRoute(index: number | null) {
+      if (index !== null && (!Number.isInteger(index) || index < 0 || index >= ROUTES.length)) return
+      if (index !== null) { this.selectedHubId = null; this.activeEvent = null; this.selectVehicle(null) }
+      this.selectedRouteIndex = index
+      if (index !== null && this.view !== 'china') {
+        const [a, b] = ROUTES[index]!
+        const pa = hubById[a]?.province, pb = hubById[b]?.province
+        if (pa !== this.view && pb !== this.view) { this.setView('china'); this.notify('已切换全国视图展示该干线') }
+      }
       this.mapVersion++
     },
     setLayer(key: LayerKey, on: boolean) {
@@ -226,6 +261,7 @@ export const useDashboardStore = defineStore('dashboard', {
         this.events = []
         this.activeEvent = null
         this.selectedHubId = null
+        this.selectedRouteIndex = null
         this.selectVehicle(null)
         this.engineId = id
       }
@@ -240,6 +276,7 @@ export const useDashboardStore = defineStore('dashboard', {
       const fromId = event.fromId ?? this.hubs.find((hub) => hub.name === names[0])?.id
       const toId = event.toId ?? this.hubs.find((hub) => hub.name === names[names.length - 1])?.id
       this.selectVehicle(null)
+      this.selectedRouteIndex = null
       this.activeEvent = { ...event, fromId, toId }
       // 同省事件下钻到该省；跨省事件保留全国地图，才能同时展示起终点和事件位置。
       const from = fromId ? hubById[fromId]?.province : undefined
@@ -248,9 +285,9 @@ export const useDashboardStore = defineStore('dashboard', {
       this.selectedHubId = toId ?? null
       this.notify(`已定位：${event.place} · ${this.viewName}视图`)
     },
-    clearSelection() { this.selectedHubId = null; this.activeEvent = null; this.selectVehicle(null) },
+    clearSelection() { this.selectedHubId = null; this.activeEvent = null; this.selectedRouteIndex = null; this.selectVehicle(null) },
     escape() {
-      if (this.selectedHubId || this.activeEvent || this.selectedPlate) this.clearSelection()
+      if (this.selectedHubId || this.activeEvent || this.selectedPlate || this.selectedRouteIndex !== null) this.clearSelection()
       else if (this.view !== 'china') this.setView('china')
     },
     setView(v: string) {

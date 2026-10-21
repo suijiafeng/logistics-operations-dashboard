@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { HUBS, ROUTES, hubById } from '../src/network.js'
 import { ROUTE_GEOMETRY, routeKm, pointAtKm, headingAtKm } from '../src/routes.js'
-import { snapshot, step, vehicleDetail } from '../src/engine.js'
+import { snapshot, step, vehicleDetail, ROUTE_CODE } from '../src/engine.js'
 
 test('每条干线都有真实道路折线，首尾钉在网点坐标上，里程与 OSRM 路程一致', () => {
   assert.equal(ROUTE_GEOMETRY.length, ROUTES.length)
@@ -47,7 +47,17 @@ test('车辆位置落在所属干线折线附近，网点坐标为园区 POI 且
     // 5 位小数
     assert.equal(lng, Math.round(lng * 1e5) / 1e5)
     assert(lng > 73 && lng < 136 && lat > 18 && lat < 54)
+    // 第三位 = 状态 × 100 + 线路下标
+    const code = snap.vehicles[i * 3 + 2]
+    const status = Math.floor(code / ROUTE_CODE), route = code % ROUTE_CODE
+    assert(status >= 0 && status <= 2 && route >= 0 && route < ROUTES.length)
   }
+  // 全部干线今日单量与排行前 8 同源
+  assert.equal(snap.routeOrders.length, ROUTES.length)
+  const top = snap.routeVolumes[0]
+  const topIndex = ROUTES.findIndex(([a, b]) => a === top.fromId && b === top.toId)
+  assert.equal(snap.routeOrders[topIndex], top.value)
+  assert.equal(Math.max(...snap.routeOrders), top.value)
   const detail = vehicleDetail('粤A·10000')
   assert(detail && detail.routeKm > 0 && detail.traveledKm + detail.remainingKm - detail.routeKm <= 1)
   assert(detail.heading >= 0 && detail.heading < 360)

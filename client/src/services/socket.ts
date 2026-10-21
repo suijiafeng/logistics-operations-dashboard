@@ -58,6 +58,7 @@ function validStats(value: Record<string, unknown>, fullHubs: boolean) {
   return Array.isArray(value.trend) && value.trend.length === 24 && value.trend.every(n => n === null || finite(n) && n >= 0) &&
     optional(value.trendYesterday, t => Array.isArray(t) && t.length === 24 && t.every(n => finite(n) && n >= 0)) &&
     ['modes', 'punctuality', 'routeVolumes'].every(k => named(value[k])) &&
+    optional(value.routeOrders, items => Array.isArray(items) && items.length === ROUTES.length && items.every(n => finite(n) && n >= 0)) &&
     Array.isArray(value.hubs) && value.hubs.every(h => validHub(h, fullHubs)) &&
     (events === undefined || Array.isArray(events) && events.every(e => isRecord(e) && finite(e.id) &&
       ['time', 'type', 'vehicle', 'place', 'desc'].every(k => isString(e[k])) && finite(e.level) &&

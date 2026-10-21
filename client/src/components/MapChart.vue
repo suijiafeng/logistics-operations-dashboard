@@ -12,7 +12,8 @@ import { HUBS, ROUTES, hubById, hubsInProvince } from '../data/network'
 import { provinceByName } from '../data/provinces'
 import { routeCoords as routeGeometry, loadRoutes } from '../services/geo'
 import { loadRegion, geoAspect, type Region, type Geo } from '../services/region'
-import { plateOf, indexOfPlate } from '../services/vehicles'
+import { plateOf, indexOfPlate, statusOf, routeOf } from '../services/vehicles'
+import { ROUTE_GEOMETRY } from '../services/geo'
 import chinaGeo from '../assets/geo/china.json'
 
 const store = useDashboardStore()
@@ -66,11 +67,34 @@ const LAYER_ROWS: { key: LayerKey; label: string; dot: string }[] = [
   { key: 'enroute', label: '在途', dot: 'enroute' },
   { key: 'dwell', label: '装卸', dot: 'dwell' },
   { key: 'anomaly', label: '异常', dot: 'anomaly' },
-  { key: 'routes', label: '干线', dot: 'route' },
+  { key: 'routes', label: '干线 · 粗细按单量', dot: 'route' },
   { key: 'hubs', label: '网点', dot: 'hub' },
 ]
 const legendTotal = computed(() => statusCounts.value[0] + statusCounts.value[1] + statusCounts.value[2])
-const drawerOpen = computed(() => store.hasData && (!!store.selectedHub || !!store.selectedPlate))
+const drawerOpen = computed(() => store.hasData && (!!store.selectedHub || !!store.selectedPlate || store.selectedRouteIndex !== null))
+
+// 干线按今日单量四分位分级：粗细与颜色随单量递增；选中某条线时其余线路与线外车辆淡出
+const GRADE_STYLE = [
+  { width: 1, color: COLORS.route, opacity: 0.75 },
+  { width: 1.6, color: COLORS.bar, opacity: 0.85 },
+  { width: 2.4, color: COLORS.barStrong, opacity: 0.9 },
+  { width: 3.2, color: COLORS.barLight, opacity: 0.95 },
+]
+const routeGrades = computed(() => {
+  const orders = store.routeOrders
+  if (orders.length !== ROUTES.length) return ROUTES.map(() => 1)
+  const sorted = [...orders].sort((a, b) => a - b)
+  const q = (p: number) => sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))]!
+  const [q1, q2, q3] = [q(0.25), q(0.5), q(0.75)]
+  return orders.map((v) => (v >= q3 ? 3 : v >= q2 ? 2 : v >= q1 ? 1 : 0))
+})
+const gradeKey = computed(() => routeGrades.value.join(''))
+const routeRank = computed(() => {
+  const order = store.routeOrders.map((v, i) => ({ v, i })).sort((a, b) => b.v - a.v || a.i - b.i)
+  const rank = new Array<number>(ROUTES.length).fill(0)
+  order.forEach((item, position) => { rank[item.i] = position + 1 })
+  return rank
+})
 
 function inView(lng: number, lat: number) {
   if (store.view === 'china') return true
@@ -81,28 +105,36 @@ function visibleHubs() {
   return HUBS.filter((h) => inView(h.lng, h.lat))
 }
 
-/** 把扁平车辆数组按状态拆成三组散点数据（只取前 limit 台做分片渐进）；数据项第三位为车辆下标，点击时换算车牌 */
+/** 把扁平车辆数组按状态拆成三组散点数据（只取前 limit 台做分片渐进）；数据项第三位为车辆下标，点击时换算车牌。
+ *  选中干线时，线上车辆进三组正常散点，线外车辆并入第四组淡化散点 */
 function vehicleSeriesData(limit: number) {
-  const groups: [number, number, number][][] = [[], [], []]
+  const groups: [number, number, number][][] = [[], [], [], []]
   const flat = store.vehicles
   const total = Math.min(limit, store.vehicleCount, Math.floor(flat.length / 3))
   const budget = store.quality === 'full' ? total : store.quality === 'balanced' ? 6000 : 3000
   const stride = Math.max(1, Math.ceil(total / budget))
   const counts: [number, number, number] = [0, 0, 0]
   const on = STATUS_LAYER.map((key) => store.layers[key])
+  const focusRoute = store.selectedRouteIndex
   for (let i = 0; i < total; i++) {
     const lng = flat[i * 3]!
     const lat = flat[i * 3 + 1]!
-    const status = flat[i * 3 + 2]!
+    const code = flat[i * 3 + 2]!
+    const status = statusOf(code)
     if (!inView(lng, lat)) continue
     if (status >= 0 && status <= 2) counts[status as 0 | 1 | 2]++
     if (!on[status]) continue
+    if (focusRoute !== null && routeOf(code) !== focusRoute) {
+      if (i % stride === 0) groups[3]!.push([lng, lat, i])
+      continue
+    }
     if (status === 0 && i % stride !== 0) continue
     groups[status]?.push([lng, lat, i])
   }
   if (total >= store.vehicleCount) statusCounts.value = counts
   return groups
 }
+const VEHICLE_SERIES_IDS = ['veh-0', 'veh-1', 'veh-2', 'veh-dim']
 
 function renderVehicles(limit = Number.POSITIVE_INFINITY) {
   const c = chart.value
@@ -111,7 +143,7 @@ function renderVehicles(limit = Number.POSITIVE_INFINITY) {
   store.renderedVehicles = groups.reduce((sum, group) => sum + group.length, 0)
   // 增量更新：只替换三组车辆散点与追踪标记的数据，不重建整个 option
   c.setOption({
-    series: [...groups.map((data, s) => ({ id: `veh-${s}`, data })), { id: 'vehicle-focus', data: vehicleFocusData() }],
+    series: [...groups.map((data, s) => ({ id: VEHICLE_SERIES_IDS[s], data })), { id: 'vehicle-focus', data: vehicleFocusData() }],
   })
 }
 
@@ -141,14 +173,16 @@ function progressiveFeed() {
 
 function hubData() {
   if (!store.layers.hubs) return []
+  const focusRoute = store.selectedRouteIndex !== null ? ROUTES[store.selectedRouteIndex] : undefined
   return visibleHubs().map((h) => {
     const selected = h.id === store.selectedHubId
+    const onRoute = !!focusRoute && (focusRoute[0] === h.id || focusRoute[1] === h.id)
     return {
       name: h.name, hubId: h.id, level: h.level, value: [h.lng, h.lat],
       symbolSize: selected ? 18 : h.level === 1 ? 13 : h.level === 2 ? 10 : 8,
       itemStyle: { color: selected ? ACCENT : COLORS.secondary, borderColor: selected ? COLORS.accentValue : COLORS.canvas, borderWidth: selected ? 2 : 1 },
       label: {
-        show: store.view !== 'china' || selected || (h.level === 1 && !PRD.has(h.id)),
+        show: store.view !== 'china' || selected || onRoute || (h.level === 1 && !PRD.has(h.id)),
         position: h.id === 'fs' || h.id === 'zh' ? 'left' : h.id === 'dg' || h.id === 'gz' ? 'top' : 'right',
         offset: h.id === 'fs' ? [-8, 12] : h.id === 'gz' ? [-8, -16] : h.id === 'dg' ? [16, -8] : [0, 0],
         color: selected ? COLORS.heading : h.level === 1 ? COLORS.text : COLORS.secondary,
@@ -210,7 +244,38 @@ function routesInView() {
 }
 
 function linesData() {
-  return store.layers.routes ? routesInView().map((index) => ({ coords: routeCoords(index) })) : []
+  if (!store.layers.routes) return []
+  const focus = store.selectedRouteIndex
+  const grades = routeGrades.value
+  return routesInView().map((index) => {
+    const style = GRADE_STYLE[grades[index] ?? 1]!
+    return { coords: routeCoords(index), routeIndex: index, lineStyle: focus !== null && focus !== index ? { ...style, opacity: 0.2 } : style }
+  })
+}
+
+function routeFocusData() {
+  const index = store.selectedRouteIndex
+  return index !== null && routesInView().includes(index) ? [{ coords: routeCoords(index) }] : []
+}
+
+function routeName(index: number) {
+  const [a, b] = ROUTES[index]!
+  return `${hubById[a]!.name} → ${hubById[b]!.name}`
+}
+
+function routeTooltip(p: { data?: { routeIndex?: number } }) {
+  const index = p.data?.routeIndex
+  if (typeof index !== 'number') return ''
+  const orders = store.routeOrders[index]
+  const fleet = store.routeFleet[index]
+  const geometry = ROUTE_GEOMETRY[index]
+  return [
+    `干线：${routeName(index)}`,
+    orders != null ? `今日单量 ${fmtInt(orders)} · 第 ${routeRank.value[index]} / ${ROUTES.length} 位` : '',
+    fleet ? `线上车辆 ${fmtInt(fleet[0] + fleet[1] + fleet[2])} 台${fleet[2] ? ` · 异常 ${fleet[2]}` : ''}` : '',
+    geometry ? `${fmtInt(Math.round(geometry.distanceKm))} km` : '',
+    store.selectedRouteIndex === index ? '已选中 · 双击选中线上车辆' : '单击查看线路并只突出线上车辆 · 双击选中线上车辆',
+  ].filter(Boolean).join('<br/>')
 }
 
 function eventRouteData() {
@@ -235,7 +300,7 @@ function vehiclePosition(): [number, number, number] | undefined {
   if (!plate) return undefined
   const index = indexOfPlate(plate, store.vehicleCount)
   if (index >= 0 && store.vehicles.length >= (index + 1) * 3) {
-    return [store.vehicles[index * 3]!, store.vehicles[index * 3 + 1]!, store.vehicles[index * 3 + 2]!]
+    return [store.vehicles[index * 3]!, store.vehicles[index * 3 + 1]!, statusOf(store.vehicles[index * 3 + 2]!)]
   }
   const d = store.vehicle
   return d ? [d.position[0], d.position[1], d.status] : undefined
@@ -267,7 +332,7 @@ function hubTooltip(p: { data?: { name?: string; hubId?: string } }) {
 function vehicleTooltip(p: { seriesId?: string; data?: number[] }) {
   const index = p.data?.[2]
   const status = Number(p.seriesId?.split('-')[1])
-  return typeof index === 'number' ? `${plateOf(index)} · ${STATUS_TEXT[status] ?? ''}<br/>点击查看车辆详情` : ''
+  return typeof index === 'number' ? `${plateOf(index)} · ${STATUS_TEXT[status] ?? ''}<br/>双击追踪该车（单击优先选中所在干线）` : ''
 }
 
 function geoTooltip(p: { name: string }) {
@@ -291,6 +356,7 @@ function updateSelection() {
     { id: 'event-position', data: eventPositionData() },
     { id: 'vehicle-route', data: vehicleRouteData() },
     { id: 'vehicle-focus', data: vehicleFocusData() },
+    { id: 'route-focus', data: routeFocusData() },
   ] })
   // 地图已让出右侧空间，抽屉固定在右侧
   store.detailSide = 'right'
@@ -321,15 +387,30 @@ function baseOption() {
     },
     series: [
       {
+        // 干线：粗细与颜色按今日单量四分位分级（每条数据项自带 lineStyle），可悬停与点击
         id: 'lines',
         type: 'lines',
         coordinateSystem: 'geo',
         zlevel: 1,
         polyline: true,
-        silent: true,
         lineStyle: { color: COLORS.route, width: 1.2, opacity: 0.9 },
+        emphasis: { lineStyle: { width: 4, opacity: 1 } },
         effect: { show: motion.value, period: 9, trailLength: 0.08, symbolSize: 2, color: COLORS.barLight },
+        tooltip: { formatter: routeTooltip },
         data: linesData(),
+      },
+      {
+        // 选中干线之外的车辆：单色淡化，不参与悬停
+        id: 'veh-dim', type: 'scatter', coordinateSystem: 'geo', zlevel: 2,
+        symbolSize: 3, large: true, largeThreshold: 2000, progressive: 3000, progressiveThreshold: 6000,
+        itemStyle: { color: COLORS.secondary, opacity: 0.18 }, silent: true,
+        data: [] as [number, number, number][],
+      },
+      {
+        // 选中的干线：橙色加粗压在分级线路之上
+        id: 'route-focus', type: 'lines', coordinateSystem: 'geo', zlevel: 5,
+        polyline: true, silent: true, lineStyle: { color: ACCENT, width: 4, opacity: 1 },
+        data: routeFocusData(),
       },
       ...[0, 1, 2].map((s) => ({
         id: `veh-${s}`,
@@ -466,30 +547,69 @@ function drillTo(adcode: string) {
   store.setView(adcode)
 }
 
-/** 空白处点击：在鼠标附近 10 像素内找最近的车辆（large 模式散点不一定命中），找不到则清除选择 */
-function pickVehicle(x: number, y: number) {
+/** 鼠标附近 radius 像素内最近的车辆下标（large 模式散点不产生图表点击事件，自行就近拾取），没有返回 -1 */
+function nearestVehicle(x: number, y: number, radius: number) {
   const c = chart.value
-  if (!c || !store.hasData) return false
+  if (!c || !store.hasData) return -1
   const origin = c.convertFromPixel({ geoIndex: 0 }, [x, y]) as [number, number] | undefined
-  const dx = c.convertFromPixel({ geoIndex: 0 }, [x + 10, y]) as [number, number] | undefined
-  const dy = c.convertFromPixel({ geoIndex: 0 }, [x, y + 10]) as [number, number] | undefined
-  if (!origin || !dx || !dy) return false
+  const dx = c.convertFromPixel({ geoIndex: 0 }, [x + radius, y]) as [number, number] | undefined
+  const dy = c.convertFromPixel({ geoIndex: 0 }, [x, y + radius]) as [number, number] | undefined
+  if (!origin || !dx || !dy) return -1
   const tolLng = Math.abs(dx[0] - origin[0]), tolLat = Math.abs(dy[1] - origin[1])
-  if (!tolLng || !tolLat) return false
+  if (!tolLng || !tolLat) return -1
   const flat = store.vehicles
   const on = STATUS_LAYER.map((key) => store.layers[key])
   let best = -1, bestDist = Number.POSITIVE_INFINITY
   for (let i = 0; i < store.vehicleCount; i++) {
-    const status = flat[i * 3 + 2]!
+    const status = statusOf(flat[i * 3 + 2]!)
     if (!on[status]) continue
     const u = (flat[i * 3]! - origin[0]) / tolLng, v = (flat[i * 3 + 1]! - origin[1]) / tolLat
     if (u > 1 || u < -1 || v > 1 || v < -1) continue
     const dist = u * u + v * v
     if (dist < bestDist && inView(flat[i * 3]!, flat[i * 3 + 1]!)) { bestDist = dist; best = i }
   }
-  if (best < 0) return false
-  focusVehicle(plateOf(best))
-  return true
+  return best
+}
+
+/** 鼠标附近 radius 像素内最近的干线下标：按当前视图抽稀后的折线逐段算点到线段的像素距离 */
+function nearestRoute(x: number, y: number, radius: number) {
+  const c = chart.value
+  if (!c || !store.layers.routes) return -1
+  let best = -1, bestDist = radius * radius
+  for (const index of routesInView()) {
+    const coords = routeCoords(index)
+    let prev: number[] | undefined
+    for (const coord of coords) {
+      const p = c.convertToPixel({ geoIndex: 0 }, coord) as number[] | undefined
+      if (!p) continue
+      if (prev) {
+        const vx = p[0]! - prev[0]!, vy = p[1]! - prev[1]!
+        const len = vx * vx + vy * vy
+        const t = len > 0 ? Math.max(0, Math.min(1, ((x - prev[0]!) * vx + (y - prev[1]!) * vy) / len)) : 0
+        const ex = prev[0]! + vx * t - x, ey = prev[1]! + vy * t - y
+        const dist = ex * ex + ey * ey
+        if (dist < bestDist) { bestDist = dist; best = index }
+      }
+      prev = p
+    }
+  }
+  return best
+}
+
+/** 空白处 / 线路 / 车辆点击的统一拾取。全国视图里繁忙干线每像素约有两台车，线路与车辆无法靠距离区分，
+ *  规则固定为：单击 6 像素内有干线选干线，否则 10 像素内有车选车，都没有则清除；双击选单击时最近的车辆。
+ *  双击的第二次单击会落在抽屉打开后已经移动的地图上，所以车辆候选在第一次单击时就记下 */
+let clickCandidate = -1
+let lastClickAt = 0
+function pickAt(x: number, y: number) {
+  const now = Date.now()
+  if (now - lastClickAt < 350) return
+  lastClickAt = now
+  clickCandidate = nearestVehicle(x, y, 10)
+  const route = nearestRoute(x, y, 6)
+  if (route >= 0) { store.selectRoute(route); return }
+  if (clickCandidate >= 0) { focusVehicle(plateOf(clickCandidate)); return }
+  store.clearSelection()
 }
 
 function search() {
@@ -507,7 +627,7 @@ watch(chart, (c) => {
   if (!c) return
   void rebuildMap()
   // ECharts 的图表点击先于下面的 zrender 点击触发：网点 / 省份 / 聚合标签等命中后标记已处理，
-  // 其余情况（省级视图的地级市面、静默的干线折线、空白处）交给 zrender 点击做车辆就近拾取
+  // 其余情况（省级视图的地级市面、干线折线、车辆散点、空白处）交给 zrender 点击按像素距离拾取车辆或干线
   let consumed = false
   c.on('click', (params) => {
     c.dispatchAction({ type: 'hideTip' })
@@ -528,9 +648,13 @@ watch(chart, (c) => {
       consumed = true
     }
   })
+  // 干线折线被上层车辆散点遮挡时不会产生图表点击事件，线路与车辆都在这里按像素距离拾取
   c.getZr().on('click', (event) => {
-    if (consumed) { consumed = false; return }
-    if (!pickVehicle(event.offsetX, event.offsetY)) store.clearSelection()
+    if (consumed) { consumed = false; clickCandidate = -1; return }
+    pickAt(event.offsetX, event.offsetY)
+  })
+  c.getZr().on('dblclick', () => {
+    if (clickCandidate >= 0) focusVehicle(plateOf(clickCandidate))
   })
 }, { flush: 'post' })
 
@@ -558,6 +682,9 @@ onBeforeUnmount(() => {
 })
 
 watch([() => store.selectedHubId, () => store.activeEvent, () => store.selectedPlate, () => store.vehicle, coarse], updateSelection)
+// 选中干线：线路淡出 / 高亮与线外车辆淡化一起更新；单量分级变化（跨四分位）时重画线路
+watch(() => store.selectedRouteIndex, () => { updateSelection(); scheduleVehicleRender() })
+watch(gradeKey, () => { if (store.hasData) updateSelection() })
 watch(() => store.layers, () => { updateSelection(); scheduleVehicleRender() }, { deep: true })
 watch(motion, () => { void rebuildMap() })
 watch(() => store.quality, scheduleVehicleRender)
