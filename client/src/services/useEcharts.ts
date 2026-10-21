@@ -8,7 +8,7 @@ const POINTER_EVENTS = ['mousedown', 'mouseup', 'mousemove', 'mouseout', 'mouseo
   'wheel', 'mousewheel', 'pointerdown', 'pointerup', 'pointermove', 'pointerout', 'pointerover', 'pointercancel']
 
 /** 通用 ECharts 挂载：初始化、窗口 resize、卸载销毁（实例用 shallowRef，避免被响应式深代理） */
-export function useEcharts(): { el: Ref<HTMLDivElement | null>; chart: ShallowRef<EChartsType | null> } {
+export function useEcharts(): { el: Ref<HTMLDivElement | null>; chart: ShallowRef<EChartsType | null>; onResized: (cb: () => void) => void } {
   const el = ref<HTMLDivElement | null>(null)
   const chart = shallowRef<EChartsType | null>(null)
   const motion = useChartMotion()
@@ -23,6 +23,10 @@ export function useEcharts(): { el: Ref<HTMLDivElement | null>; chart: ShallowRe
     const cap = store.quality === 'full' ? 2 : store.quality === 'balanced' ? 1.5 : 1
     return Math.max(1, Math.min(window.devicePixelRatio || 1, cap)) * store.screenScale
   }
+
+  // 图表实例完成 resize / 重建后通知使用方：依赖画布像素尺寸的布局（如地图 layoutCenter）必须在此之后重算
+  const resizedCallbacks: (() => void)[] = []
+  function emitResized() { for (const cb of resizedCallbacks) cb() }
 
   function rebuild() {
     if (!el.value || !el.value.clientWidth || !el.value.clientHeight) return
@@ -53,6 +57,7 @@ export function useEcharts(): { el: Ref<HTMLDivElement | null>; chart: ShallowRe
     resizeTimer = window.setTimeout(() => {
       if (!chart.value || Math.abs(currentDpr() - dpr) > 0.01) rebuild()
       else chart.value.resize()
+      emitResized()
     }, 100)
   }
 
@@ -89,7 +94,7 @@ export function useEcharts(): { el: Ref<HTMLDivElement | null>; chart: ShallowRe
     chart.value?.dispose()
     chart.value = null
   })
-  return { el, chart }
+  return { el, chart, onResized: (cb: () => void) => { resizedCallbacks.push(cb) } }
 }
 
 /** 深色大屏统一的 ECharts 文本样式 */

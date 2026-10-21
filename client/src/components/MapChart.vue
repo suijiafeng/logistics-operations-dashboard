@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { onBeforeUnmount, ref, watch } from 'vue'
 import echarts from '../services/echarts'
 import { useEcharts, ACCENT, RED, TOOLTIP, TEXT } from '../services/useEcharts'
 import { COLORS, FONT } from '../design/tokens'
@@ -11,7 +11,7 @@ import { HUBS, ROUTES, hubById } from '../data/network'
 import chinaGeo from '../assets/geo/china.json'
 
 const store = useDashboardStore()
-const { el, chart } = useEcharts()
+const { el, chart, onResized } = useEcharts()
 // 南海诸岛小图：独立实例，容器裁掉框外部分，只显示南海范围
 const { el: insetEl, chart: insetChart } = useEcharts()
 const motion = useChartMotion()
@@ -188,9 +188,11 @@ function routeCoords(index: number) {
 function eventRouteData() {
   const event = store.activeEvent
   if (!event) return []
-  const index = event.routeIndex ?? ROUTES.findIndex(([a, b]) =>
-    (a === event.fromId && b === event.toId) || (a === event.toId && b === event.fromId))
-  return index >= 0 && index < ROUTES.length ? [{ coords: routeCoords(index) }] : []
+  // 消费端防御：routeIndex 不是有效整数下标时退回按起终点查找，不让非法值导致取线路报错
+  const given = event.routeIndex
+  const index = typeof given === 'number' && Number.isInteger(given) && given >= 0 && given < ROUTES.length ? given
+    : ROUTES.findIndex(([a, b]) => (a === event.fromId && b === event.toId) || (a === event.toId && b === event.fromId))
+  return index >= 0 ? [{ coords: routeCoords(index) }] : []
 }
 
 function eventPositionData() {
@@ -410,20 +412,10 @@ watch(insetChart, (c) => {
   })
 }, { flush: 'post' })
 
-// 容器尺寸变化时按新尺寸重算抽屉打开状态下的地图布局（像素坐标不会随 resize 自动更新）
-let layoutObserver: ResizeObserver | undefined
-let layoutRaf = 0
-onMounted(() => {
-  layoutObserver = new ResizeObserver(() => {
-    cancelAnimationFrame(layoutRaf)
-    layoutRaf = requestAnimationFrame(() => chart.value?.setOption({ geo: geoLayout() }))
-  })
-  if (el.value) layoutObserver.observe(el.value)
-})
+// 地图布局用的是画布像素坐标，不会随 resize 自动更新：等图表实例按新尺寸 resize 完成后再重算
+onResized(() => chart.value?.setOption({ geo: geoLayout() }))
 
 onBeforeUnmount(() => {
-  layoutObserver?.disconnect()
-  cancelAnimationFrame(layoutRaf)
   disposed = true
   buildVersion++
   cancelAnimationFrame(rafId)
