@@ -1,4 +1,5 @@
 import { useDashboardStore, type DeltaMsg, type SnapshotMsg } from '../stores/dashboard'
+import { ROUTES } from '../data/network'
 
 // 数据链路：先 HTTP 拉全量快照（12,000 台车辆位置 + 全部统计），再连 WebSocket 收 1 秒聚合的增量包
 let ws: WebSocket | null = null
@@ -46,6 +47,9 @@ function validHub(h: unknown, full: boolean) {
     optional(h.recentLabels, items => Array.isArray(items) && items.every(isString))
 }
 
+// 线路下标必须是有效整数下标：0.5、-1、越界值都会让地图取不到线路
+const isRouteIndex = (n: unknown) => typeof n === 'number' && Number.isInteger(n) && n >= 0 && n < ROUTES.length
+
 function validStats(value: Record<string, unknown>, fullHubs: boolean) {
   const named = (items: unknown) => Array.isArray(items) && items.every(n => isRecord(n) && isString(n.name) && finite(n.value) &&
     ['id', 'fromId', 'toId'].every(k => optional(n[k], isString)))
@@ -55,7 +59,7 @@ function validStats(value: Record<string, unknown>, fullHubs: boolean) {
     Array.isArray(value.hubs) && value.hubs.every(h => validHub(h, fullHubs)) &&
     (events === undefined || Array.isArray(events) && events.every(e => isRecord(e) && finite(e.id) &&
       ['time', 'type', 'vehicle', 'place', 'desc'].every(k => isString(e[k])) && finite(e.level) &&
-      ['fromId', 'toId'].every(k => optional(e[k], isString)) && optional(e.routeIndex, finite) &&
+      ['fromId', 'toId'].every(k => optional(e[k], isString)) && optional(e.routeIndex, isRouteIndex) &&
       optional(e.position, p => Array.isArray(p) && p.length === 2 && p.every(finite))))
 }
 
