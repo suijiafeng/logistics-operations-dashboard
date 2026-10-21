@@ -1,6 +1,19 @@
 import { defineStore } from 'pinia'
 import type { Hub } from '../data/network'
-import { HUBS, GUANGDONG_HUB_IDS } from '../data/network'
+import { HUBS, hubById } from '../data/network'
+import { provinceName } from '../data/provinces'
+import type { VehicleDetail } from '../services/vehicles'
+
+export type LayerKey = 'routes' | 'enroute' | 'dwell' | 'anomaly' | 'hubs'
+export const LAYER_KEYS: LayerKey[] = ['routes', 'enroute', 'dwell', 'anomaly', 'hubs']
+function loadLayers(): Record<LayerKey, boolean> {
+  const layers = { routes: true, enroute: true, dwell: true, anomaly: true, hubs: true }
+  try {
+    const saved = JSON.parse(localStorage.getItem('logistics-layers') || '{}') as Partial<Record<LayerKey, boolean>>
+    for (const key of LAYER_KEYS) if (typeof saved[key] === 'boolean') layers[key] = saved[key]!
+  } catch { /* 浏览器禁用存储时用默认值 */ }
+  return layers
+}
 
 export interface Kpi {
   enRoute: number
@@ -90,10 +103,17 @@ export const useDashboardStore = defineStore('dashboard', {
     events: [] as AnomalyEvent[],
     selectedHubId: null as string | null,
     activeEvent: null as AnomalyEvent | null,
+    /** 选中追踪的车牌；详情由 /vehicles/:plate 轮询，位置在增量包里按下标读取 */
+    selectedPlate: null as string | null,
+    vehicle: null as VehicleDetail | null,
+    vehicleError: '',
+    /** 地图图层开关（持久化到 localStorage） */
+    layers: loadLayers(),
     detailSide: 'right' as 'left' | 'right',
     notice: '',
     noticeAt: 0,
-    view: 'china' as 'china' | 'guangdong',
+    /** 'china' 或省级 adcode（如 '440000'） */
+    view: 'china' as string,
     hudOn: false,
     decorationsOn: true,
     tourOn: false,
@@ -122,6 +142,8 @@ export const useDashboardStore = defineStore('dashboard', {
       if (!state.receivedAt) return state.connectionError ? 'error' : 'loading'
       return !state.connected || !!state.connectionError || state.checkedAt - state.receivedAt > 5000 ? 'stale' : 'ready'
     },
+    /** 当前视图名称：全国 / 省名 */
+    viewName(state): string { return state.view === 'china' ? '全国' : provinceName(state.view) },
     selectedHub(state): Hub | undefined {
       return state.hubs.find((h) => h.id === state.selectedHubId)
     },
@@ -178,17 +200,33 @@ export const useDashboardStore = defineStore('dashboard', {
     },
     selectHub(id: string | null) {
       this.activeEvent = null
+      this.selectVehicle(null)
       this.selectedHubId = id
-      if (id && this.view === 'guangdong' && !GUANGDONG_HUB_IDS.has(id)) {
+      if (id && this.view !== 'china' && hubById[id]?.province !== this.view) {
         this.setView('china')
         this.notify('已切换全国视图定位该网点')
       }
+    },
+    /** 选中车辆：清除网点与事件选择；详情由 VehicleDetail 轮询填充 */
+    selectVehicle(plate: string | null) {
+      if (plate === this.selectedPlate) return
+      if (plate) { this.selectedHubId = null; this.activeEvent = null }
+      this.selectedPlate = plate
+      this.vehicle = null
+      this.vehicleError = ''
+      this.mapVersion++
+    },
+    setLayer(key: LayerKey, on: boolean) {
+      this.layers[key] = on
+      try { localStorage.setItem('logistics-layers', JSON.stringify(this.layers)) } catch { /* 忽略存储失败 */ }
+      this.mapVersion++
     },
     syncEngine(id?: string) {
       if (id && id !== this.engineId) {
         this.events = []
         this.activeEvent = null
         this.selectedHubId = null
+        this.selectVehicle(null)
         this.engineId = id
       }
     },
@@ -201,18 +239,21 @@ export const useDashboardStore = defineStore('dashboard', {
       const names = event.place.split('→').map((name) => name.trim())
       const fromId = event.fromId ?? this.hubs.find((hub) => hub.name === names[0])?.id
       const toId = event.toId ?? this.hubs.find((hub) => hub.name === names[names.length - 1])?.id
+      this.selectVehicle(null)
       this.activeEvent = { ...event, fromId, toId }
-      // 跨省事件保留全国地图，才能同时展示起终点和事件位置。
-      this.setView(fromId && toId && GUANGDONG_HUB_IDS.has(fromId) && GUANGDONG_HUB_IDS.has(toId) ? 'guangdong' : 'china')
+      // 同省事件下钻到该省；跨省事件保留全国地图，才能同时展示起终点和事件位置。
+      const from = fromId ? hubById[fromId]?.province : undefined
+      const to = toId ? hubById[toId]?.province : undefined
+      this.setView(from && from === to ? from : 'china')
       this.selectedHubId = toId ?? null
-      this.notify(`已定位：${event.place} · ${this.view === 'china' ? '全国' : '广东'}视图`)
+      this.notify(`已定位：${event.place} · ${this.viewName}视图`)
     },
-    clearSelection() { this.selectedHubId = null; this.activeEvent = null },
+    clearSelection() { this.selectedHubId = null; this.activeEvent = null; this.selectVehicle(null) },
     escape() {
-      if (this.selectedHubId || this.activeEvent) this.clearSelection()
-      else if (this.view === 'guangdong') this.setView('china')
+      if (this.selectedHubId || this.activeEvent || this.selectedPlate) this.clearSelection()
+      else if (this.view !== 'china') this.setView('china')
     },
-    setView(v: 'china' | 'guangdong') {
+    setView(v: string) {
       this.view = v
       this.mapVersion++
     },

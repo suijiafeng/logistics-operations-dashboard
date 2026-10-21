@@ -50,7 +50,7 @@ export function simplify(points: Point[], tolerance: number): Point[] {
 }
 
 /** 视图对应的抽稀容差（度）：全国约 1 公里、省级约 100 米 */
-const TOLERANCE: Record<string, number> = { china: 0.01, guangdong: 0.001 }
+function tolerance(view: string) { return view === 'china' ? 0.01 : 0.001 }
 const cache = new Map<string, Point[]>()
 
 /** 未加载完成时返回空数组，地图在 loadRoutes() 后重建 */
@@ -60,7 +60,7 @@ export function routeCoords(index: number, view: string): Point[] {
   const key = `${view}:${index}`
   let coords = cache.get(key)
   if (!coords) {
-    coords = simplify(geometry.coords, TOLERANCE[view] ?? 0)
+    coords = simplify(geometry.coords, tolerance(view))
     cache.set(key, coords)
   }
   return coords

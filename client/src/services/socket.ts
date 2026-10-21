@@ -39,8 +39,8 @@ const isString = (v: unknown) => typeof v === 'string'
 function validHub(h: unknown, full: boolean) {
   if (!isRecord(h) || typeof h.id !== 'string') return false
   const identity = full
-    ? isString(h.name) && isString(h.site) && finite(h.lng) && finite(h.lat) && finite(h.level)
-    : optional(h.name, isString) && optional(h.site, isString) && optional(h.lng, finite) && optional(h.lat, finite) && optional(h.level, finite)
+    ? isString(h.name) && isString(h.site) && isString(h.province) && finite(h.lng) && finite(h.lat) && finite(h.level)
+    : optional(h.name, isString) && optional(h.site, isString) && optional(h.province, isString) && optional(h.lng, finite) && optional(h.lat, finite) && optional(h.level, finite)
   return identity &&
     ['arrivals', 'departures', 'backlog', 'utilization', 'onTime'].every(k => optional(h[k], n => finite(n) && n >= 0)) &&
     optional(h.recentOrders, items => Array.isArray(items) && items.every(n => finite(n) && n >= 0)) &&

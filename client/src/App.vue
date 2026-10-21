@@ -3,6 +3,7 @@ import { onBeforeUnmount, onMounted } from 'vue'
 import TopBar from './components/TopBar.vue'
 import MapChart from './components/MapChart.vue'
 import HubDetail from './components/HubDetail.vue'
+import VehicleDetail from './components/VehicleDetail.vue'
 import TrendChart from './components/TrendChart.vue'
 import KpiOverview from './components/KpiOverview.vue'
 import TopHubs from './components/TopHubs.vue'
@@ -76,6 +77,7 @@ onBeforeUnmount(() => {
         </div>
         <MapChart>
           <HubDetail />
+          <VehicleDetail />
           <Hud />
         </MapChart>
         <div class="col right">

@@ -3,7 +3,8 @@ import { computed, ref, watch } from 'vue'
 import { useDashboardStore } from '../stores/dashboard'
 import { useFocus } from '../services/useFocus'
 import { HIGH_UTILIZATION } from '../design/tokens'
-import { ROUTES, hubById, GUANGDONG_HUB_IDS } from '../data/network'
+import { ROUTES, hubById } from '../data/network'
+import { provinceName } from '../data/provinces'
 import { fmtCompact, fmtInt } from '../services/format'
 
 const BACKLOG_WARN = 650
@@ -52,7 +53,7 @@ function jump(id: string) {
     <header>
       <div class="titles">
         <h4 :title="`${hub.name} · ${hub.site}`">{{ hub.name }} · {{ hub.site }}</h4>
-        <p :title="`${hub.lng.toFixed(5)}, ${hub.lat.toFixed(5)}（WGS84，OpenStreetMap 公开 POI）`">{{ LEVEL_TEXT[hub.level] ?? '网点' }}{{ GUANGDONG_HUB_IDS.has(hub.id) ? ' · 广东省' : '' }} · {{ hub.lng.toFixed(3) }}°E {{ hub.lat.toFixed(3) }}°N</p>
+        <p :title="`${hub.lng.toFixed(5)}, ${hub.lat.toFixed(5)}（WGS84，OpenStreetMap 公开 POI）`">{{ LEVEL_TEXT[hub.level] ?? '网点' }} · {{ provinceName(hub.province) }} · {{ hub.lng.toFixed(3) }}°E {{ hub.lat.toFixed(3) }}°N</p>
       </div>
       <button class="close" aria-label="关闭网点详情（Esc）" @click="store.selectHub(null)">×</button>
     </header>

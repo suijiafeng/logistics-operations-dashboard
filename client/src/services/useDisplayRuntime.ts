@@ -1,6 +1,6 @@
 import { onBeforeUnmount, onMounted, watch } from 'vue'
 import { useDashboardStore } from '../stores/dashboard'
-import { HUBS, GUANGDONG_HUB_IDS } from '../data/network'
+import { HUBS, GUANGDONG, GUANGDONG_HUB_IDS } from '../data/network'
 
 type WakeHandle = { release(): Promise<void>; addEventListener(type: string, listener: () => void): void }
 export function useDisplayRuntime() {
@@ -64,7 +64,7 @@ export function useDisplayRuntime() {
       store.tourPaused = store.tourOn && idle < 30_000
       if (store.tourOn && !store.tourPaused && !document.hidden && now - lastTour > 10_000) {
         const gd = tourStep % 6 >= 3
-        store.view = gd ? 'guangdong' : 'china'
+        store.setView(gd ? GUANGDONG : 'china')
         const hubs = HUBS.filter(h => gd ? GUANGDONG_HUB_IDS.has(h.id) : h.level === 1)
         store.selectHub(hubs[tourStep % hubs.length]!.id)
         tourStep++; lastTour = now
