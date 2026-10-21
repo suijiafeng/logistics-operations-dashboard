@@ -4,10 +4,9 @@ import TopBar from './components/TopBar.vue'
 import MapChart from './components/MapChart.vue'
 import HubDetail from './components/HubDetail.vue'
 import TrendChart from './components/TrendChart.vue'
-import ModePie from './components/ModePie.vue'
+import KpiOverview from './components/KpiOverview.vue'
 import TopHubs from './components/TopHubs.vue'
 import EventStream from './components/EventStream.vue'
-import PunctualityChart from './components/PunctualityChart.vue'
 import WarehousePanel from './components/WarehousePanel.vue'
 import RouteRank from './components/RouteRank.vue'
 import Hud from './components/Hud.vue'
@@ -64,22 +63,21 @@ onBeforeUnmount(() => {
       </div>
       <main class="middle">
         <div class="col left">
-          <TrendChart class="grow-4" />
-          <ModePie class="grow-3" />
-          <TopHubs class="grow-3" />
+          <KpiOverview />
+          <TrendChart />
+          <TopHubs />
         </div>
         <MapChart>
           <HubDetail />
           <Hud />
         </MapChart>
         <div class="col right">
-          <EventStream class="grow-5" />
-          <PunctualityChart class="grow-2" />
-          <WarehousePanel class="grow-3" />
+          <EventStream />
         </div>
       </main>
       <footer class="bottom">
         <RouteRank />
+        <WarehousePanel />
       </footer>
     </div>
     <div v-if="store.notice && store.checkedAt - store.noticeAt < 5000" class="toast" role="status">{{ store.notice }}</div>
@@ -113,6 +111,7 @@ button, [role='button'] { min-height: var(--control-size); }
 button { min-width: var(--control-size); }
 .interactive-row:hover { background: var(--color-hover); }
 .interactive-row.selected { background: var(--color-selected); box-shadow: inset 2px 0 var(--color-accent); }
+.interactive-row:focus-visible, .tile:focus-visible { outline: 2px solid var(--color-barLight); outline-offset: -2px; }
 button:focus-visible, [role='button']:focus-visible {
   background: var(--color-infoBg);
   color: var(--color-heading);
@@ -142,44 +141,57 @@ button:focus-visible, [role='button']:focus-visible {
   width: 100%;
   height: 100vh;
   height: 100dvh;
-  min-height: 1016px;
+  min-height: 900px;
   background: var(--color-canvas);
   display: grid;
-  grid-template-rows: auto minmax(720px, 1fr) 144px;
-  gap: var(--space-4);
+  grid-template-rows: auto minmax(560px, 1fr) 196px;
+  gap: var(--space-3);
   padding: var(--space-4);
   position: relative;
 }
 .heading { display: grid; gap: var(--space-2); }
+/* 左右两列与底部条固定尺寸，地图吸收全部剩余空间 */
 .middle {
   display: grid;
-  grid-template-columns: 304px minmax(0, 1fr) 352px;
-  gap: var(--space-4);
+  grid-template-columns: 420px minmax(0, 1fr) 420px;
+  gap: var(--space-3);
   min-height: 0;
 }
 .col {
   display: grid;
-  gap: var(--space-4);
+  gap: var(--space-3);
   min-height: 0;
   min-width: 0;
 }
-.left { grid-template-rows: minmax(184px, 1fr) 184px 224px; }
-.right { grid-template-rows: minmax(176px, 1fr) 160px 336px; }
+.left { grid-template-rows: auto minmax(160px, 1fr) 236px; }
+.right { grid-template-rows: minmax(0, 1fr); }
 .bottom {
   min-height: 0;
-  display: flex;
-}
-.bottom :deep(.panel) {
-  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 640px;
+  gap: var(--space-3);
 }
 @media (max-width: 1599px), (max-height: 980px) {
-  .screen { min-height: 900px; grid-template-rows: auto minmax(600px, 1fr) 144px; }
-  .middle { grid-template-columns: 288px minmax(0, 1fr) 336px; }
-  .left { grid-template-rows: minmax(184px, 1fr) 160px 224px; }
-  .right { grid-template-rows: minmax(200px, 1fr) 144px 224px; }
+  .screen { grid-template-rows: auto minmax(520px, 1fr) 168px; }
+  .middle { grid-template-columns: 340px minmax(0, 1fr) 340px; }
+  .left { grid-template-rows: auto minmax(150px, 1fr) 220px; }
+  .bottom { grid-template-columns: minmax(0, 1fr) 520px; }
+}
+/* 矮屏（如 1366×768 笔记本）：正常状态一屏放下；出现数据提示条时允许少量滚动，不压缩图表可读高度 */
+@media (max-height: 820px) and (min-width: 1280px) {
+  .screen { height: auto; min-height: 100vh; min-height: 100dvh; grid-template-rows: auto minmax(520px, 1fr) 150px; padding: var(--space-3); gap: var(--space-2); }
+  .middle, .col, .bottom { gap: var(--space-2); }
+  /* 中间三列不以内容撑高（告警条数随高度变化，避免互相放大），行高只取最小值与剩余空间 */
+  .middle > * { contain: size; }
+  .left { grid-template-rows: auto minmax(150px, 1fr) 176px; }
+}
+@media (min-width: 2400px) {
+  .middle { grid-template-columns: 520px minmax(0, 1fr) 520px; }
+  .bottom { grid-template-columns: minmax(0, 1fr) 800px; }
 }
 @media (max-width: 1279px) {
-  .screen { height: auto; grid-template-rows: auto auto 176px; }
+  .screen { height: auto; grid-template-rows: auto auto auto; }
+  .bottom { grid-template-columns: minmax(0, 1fr); grid-template-rows: 196px 196px; }
   .middle { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .middle > :deep(.map-wrap) { grid-column: 1 / -1; grid-row: 1; min-height: 520px; }
   .col { min-height: 600px; }
@@ -194,18 +206,18 @@ button:focus-visible, [role='button']:focus-visible {
   .screen { padding: var(--space-2); gap: var(--space-2); grid-template-rows: auto auto auto; }
   .middle { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
   .middle > :deep(.map-wrap) { min-height: 440px; }
-  .bottom { min-height: 320px; }
+  .bottom { min-height: 520px; grid-template-rows: 320px 200px; }
 }
 @media (min-aspect-ratio: 5/2) and (min-width: 2000px) {
   .middle { grid-template-columns: minmax(560px, 1fr) minmax(700px, 2fr) minmax(640px, 1fr); }
   .left, .right { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); }
   .left > :first-child, .right > :first-child { grid-column: 1 / -1; }
+  .left { grid-template-rows: auto minmax(0, 1fr); }
+  .right { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
 }
 @media (min-width: 2000px) {
   .seam-safe .middle { grid-template-columns: var(--seam-left) var(--seam-center) var(--seam-right); gap: 24px; }
-  .seam-safe :deep(.topbar) { display: grid; grid-template-columns: var(--seam-left) var(--seam-center) var(--seam-right); gap: 24px; padding-inline: 0; }
-  .seam-safe :deep(.brand), .seam-safe :deep(.meta) { min-width: 0; }
-  .seam-safe :deep(.kpis) { flex-wrap: wrap; justify-content: center; }
+  .seam-safe :deep(.topbar) { grid-template-columns: var(--seam-left) var(--seam-center) var(--seam-right); gap: 24px; padding-inline: 0; }
   .seam-safe .bottom { margin-left: calc(var(--seam-left) + 24px); margin-right: calc(var(--seam-right) + 24px); }
 }
 </style>

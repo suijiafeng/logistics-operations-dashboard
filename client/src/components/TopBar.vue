@@ -1,14 +1,13 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useDashboardStore } from '../stores/dashboard'
-import { useMediaQuery } from '../services/useMediaQuery'
 import DisplayControls from './DisplayControls.vue'
 
+// 顶栏只承载标识、时间与连接状态，不放业务数据（数据集中在下方面板，避免信息过密）
 const store = useDashboardStore()
-const reducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)')
 const STATUS_TEXT = {
   connecting: '正在连接数据服务',
-  connected: '实时数据已连接',
+  connected: '实时',
   reconnecting: '实时数据重连中',
   error: '数据服务暂不可用',
   idle: '数据连接已停止',
@@ -20,223 +19,183 @@ onMounted(() => {
 })
 onBeforeUnmount(() => window.clearInterval(timer))
 
-function fmt(n: number) {
-  return store.hasData ? n.toLocaleString('zh-CN') : '—'
-}
+const statusText = computed(() => {
+  if (store.dataStatus === 'stale') return '数据已过期'
+  const base = STATUS_TEXT[store.connectionState]
+  if (store.connectionState === 'connected') return `${base} · 延迟 ${store.latencyMs}ms`
+  return store.reconnectAttempt ? `${base}（第 ${store.reconnectAttempt} 次）` : base
+})
+const statusTone = computed(() => store.dataStatus === 'ready' ? 'ok'
+  : store.dataStatus === 'stale' || store.connectionState === 'connecting' || store.connectionState === 'reconnecting' ? 'wait' : 'off')
+const time = computed(() => now.value.toLocaleTimeString('zh-CN', { hour12: false, timeZone: 'Asia/Shanghai' }))
+const date = computed(() => now.value.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'short', timeZone: 'Asia/Shanghai' }))
 </script>
 
 <template>
   <header class="topbar">
-    <div class="brand">
-      <div class="logo">运</div>
-      <div class="titles">
-        <h1>智慧物流数据可视化监控平台</h1>
-        <p>全国干线网实时运行总览 · 全国指标口径</p>
-      </div>
+    <div class="side left">
+      <span class="sim-tag" title="页面数据由自研模拟引擎生成，非真实业务数据">仿真数据</span>
+      <DisplayControls />
     </div>
 
-    <div class="kpis">
-      <div class="kpi">
-        <span class="kpi-label">全国在途车辆</span>
-        <span class="kpi-value">{{ fmt(store.kpi.enRoute) }}<small>台</small></span>
+    <div class="title-zone">
+      <span class="wing l" aria-hidden="true"><i /><i /><i /></span>
+      <div class="tab">
+        <svg class="chev" viewBox="0 0 40 16" aria-hidden="true">
+          <path d="M2 3L8 8L2 13" class="faint" /><path d="M12 3L18 8L12 13" class="mid" /><path d="M31 4L35 8L31 12L27 8Z" class="dot" />
+        </svg>
+        <h1 title="全国干线物流运行监控">全国干线物流运行监控</h1>
+        <svg class="chev" viewBox="0 0 40 16" aria-hidden="true">
+          <path d="M9 4L13 8L9 12L5 8Z" class="dot" /><path d="M28 3L22 8L28 13" class="mid" /><path d="M38 3L32 8L38 13" class="faint" />
+        </svg>
       </div>
-      <div class="kpi">
-        <span class="kpi-label">全国今日运单</span>
-        <span class="kpi-value">{{ fmt(store.kpi.ordersToday) }}<small>单</small></span>
-      </div>
-      <div class="kpi">
-        <span class="kpi-label">全国准时率</span>
-        <span class="kpi-value">{{ store.hasData ? store.kpi.onTimeRate.toFixed(1) : '—' }}<small>%</small></span>
-      </div>
-      <div class="kpi alert">
-        <span class="kpi-label">全国待处理异常</span>
-        <span class="kpi-value">{{ fmt(store.kpi.pendingAnomalies) }}<small>起</small></span>
-      </div>
+      <span class="wing r" aria-hidden="true"><i /><i /><i /></span>
     </div>
 
-    <div class="meta">
-      <div class="clock">
-        {{ now.toLocaleTimeString('zh-CN', { hour12: false, timeZone: 'Asia/Shanghai' }) }}
-        <span class="date">{{ now.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'short', timeZone: 'Asia/Shanghai' }) }}</span>
-      </div>
-      <div class="status" :title="store.connectionError || undefined">
-        <span class="dot" :class="{ off: store.dataStatus !== 'ready', waiting: store.dataStatus === 'stale' || store.connectionState === 'connecting' || store.connectionState === 'reconnecting' }" />
-        {{ store.dataStatus === 'stale' ? '数据已过期' : STATUS_TEXT[store.connectionState] }}
-        <span v-if="store.reconnectAttempt">（第 {{ store.reconnectAttempt }} 次）</span>
-        <span class="sim">自研引擎 · 仿真数据</span>
-      </div>
-      <div class="tools">
-        <DisplayControls />
-        <span class="updated">{{ store.dataAt ? `更新 ${new Date(store.dataAt).toLocaleTimeString('zh-CN', { hour12: false, timeZone: 'Asia/Shanghai' })}` : '等待首包数据' }}</span>
-        <button class="hud-btn" :aria-pressed="store.hudOn" :class="{ on: store.hudOn }" @click="store.toggleHud()">性能 HUD</button>
-        <button class="hud-btn" :aria-pressed="store.decorationsOn && !reducedMotion" :disabled="reducedMotion"
-          @click="store.decorationsOn = !store.decorationsOn">{{ reducedMotion ? '已减少动态效果' : store.decorationsOn ? '关闭装饰动效' : '开启动效' }}</button>
-      </div>
+    <div class="side right">
+      <span class="status" :class="statusTone" :title="store.connectionError || statusText">
+        <span class="dot" /><span class="status-text">{{ statusText }}</span>
+      </span>
+      <span class="date">{{ date }}</span>
+      <time class="clock">{{ time }}</time>
     </div>
   </header>
 </template>
 
 <style scoped>
+/* 三栏：左右等宽，标题永远居中；两侧内容过长时各自省略，不挤占标题 */
 .topbar {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  gap: var(--space-6);
-  padding: var(--space-2) var(--space-4);
-  min-height: 88px;
+  gap: var(--space-4);
+  height: 56px;
+  padding: 0 var(--space-6);
   background: var(--color-header);
-}
-.brand {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  flex: none;
-}
-.logo {
-  width: 40px;
-  height: 40px;
+  border: 1px solid var(--color-track);
   border-radius: var(--radius-panel);
-  background: var(--color-accent);
-  color: var(--color-onAccent);
-  font-size: var(--font-page);
-  font-weight: 800;
+  position: relative;
+  overflow: hidden;
+}
+.side { display: flex; align-items: center; gap: var(--space-3); min-width: 0; position: relative; z-index: 2; }
+.side.right { justify-content: flex-end; gap: var(--space-6); }
+.sim-tag {
+  flex: none;
+  font-size: var(--font-small);
+  color: var(--color-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 3px;
+  padding: 0 var(--space-2);
+  line-height: 20px;
+}
+
+/* ---- 标题区装饰 ---- */
+.title-zone { position: relative; height: 56px; display: flex; align-items: center; justify-content: center; }
+.tab {
+  position: relative;
+  height: 56px;
+  padding: 0 64px 6px;
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: var(--space-4);
 }
-.titles h1 {
+.tab::before { /* 梯形底托 */
+  content: '';
+  position: absolute;
+  inset: -1px 0 6px;
+  clip-path: polygon(0 0, 100% 0, calc(100% - 30px) 100%, 30px 100%);
+  background: linear-gradient(180deg, rgba(18, 48, 90, 0.95), rgba(14, 29, 56, 0.6));
+}
+.tab::after { /* 底托亮线 + 光晕 */
+  content: '';
+  position: absolute;
+  left: 30px;
+  right: 30px;
+  bottom: 5px;
+  height: 1.5px;
+  background: var(--color-barLight);
+  box-shadow: 0 0 14px 2px rgba(91, 166, 238, 0.45);
+}
+h1 {
+  position: relative;
+  max-width: min(36vw, 640px);
   font-size: var(--font-page);
   font-weight: 700;
-  letter-spacing: 0;
+  letter-spacing: 0.06em;
   color: var(--color-heading);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.titles p {
-  font-size: var(--font-small);
-  color: var(--color-secondary);
-  letter-spacing: 3px;
-  margin-top: 1px;
+.chev { position: relative; width: 40px; height: 16px; flex: none; }
+.chev path { fill: none; stroke: var(--color-barLight); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.chev .faint { stroke-opacity: 0.35; }
+.chev .mid { stroke-opacity: 0.7; }
+.chev .dot { fill: var(--color-barLight); stroke: none; }
+/* 两侧翼线：从标题向外渐隐，末端三道斜条 */
+.wing {
+  position: absolute;
+  bottom: 6px;
+  width: clamp(0px, calc(24vw - 80px), 460px);
+  height: 12px;
+  pointer-events: none;
 }
-.kpis {
-  display: flex;
-  gap: var(--space-6);
-  margin: 0 auto;
-}
-.kpi {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-}
-.kpi-label {
-  font-size: var(--font-small);
-  color: var(--color-secondary);
-  letter-spacing: 2px;
-}
-.kpi-value {
-  font-size: var(--font-kpi);
-  font-weight: 700;
-  color: var(--color-accentValue);
-  font-variant-numeric: tabular-nums;
-  line-height: 1.15;
-}
-.kpi-value small {
-  font-size: var(--font-body);
-  color: var(--color-secondary);
-  margin-left: var(--space-1);
-  font-weight: 400;
-}
-.kpi.alert .kpi-value {
-  color: var(--color-dangerText);
-}
-.meta {
-  flex: none;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: var(--space-1);
-}
-.clock {
-  font-size: var(--font-title);
-  font-weight: 600;
-  color: var(--color-text);
-  font-variant-numeric: tabular-nums;
-}
-.clock .date {
-  font-size: var(--font-small);
-  color: var(--color-secondary);
-  margin-left: var(--space-2);
-  font-weight: 400;
-}
+.wing.l { right: calc(100% - 30px); background: linear-gradient(to left, rgba(91, 166, 238, 0.8), transparent) bottom / 100% 1px no-repeat; }
+.wing.r { left: calc(100% - 30px); background: linear-gradient(to right, rgba(91, 166, 238, 0.8), transparent) bottom / 100% 1px no-repeat; }
+.wing i { position: absolute; bottom: 0; width: 10px; height: 12px; background: var(--color-barLight); }
+.wing.l i { right: calc(var(--i) * 18px + 6px); transform: skewX(-30deg); }
+.wing.r i { left: calc(var(--i) * 18px + 6px); transform: skewX(30deg); }
+.wing i:nth-child(1) { --i: 0; opacity: 0.9; }
+.wing i:nth-child(2) { --i: 1; opacity: 0.6; }
+.wing i:nth-child(3) { --i: 2; opacity: 0.3; }
+
+/* ---- 右侧状态 ---- */
 .status {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: var(--space-2);
+  min-width: 0;
+  max-width: 260px;
+  padding: 3px var(--space-3) 3px 10px;
+  border-radius: 12px;
+  background: var(--color-elevated);
   font-size: var(--font-small);
   color: var(--color-secondary);
 }
-.status .dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--color-success);
-  animation: pulse 1.6s infinite;
-}
-.status .dot.off {
-  background: var(--color-danger);
-  animation: none;
-}
-.status .dot.waiting {
-  background: var(--color-warning);
-  animation: pulse 1.6s infinite;
-}
-.status .sim {
-  color: var(--color-secondary);
-  margin-left: var(--space-2);
-}
-@keyframes pulse {
-  0% { opacity: 1; }
-  50% { opacity: 0.35; }
-  100% { opacity: 1; }
-}
-.hud-btn {
-  margin-top: var(--space-1);
-  background: var(--color-track);
-  color: var(--color-secondary);
-  border: none;
-  border-radius: var(--radius-control);
-  padding: var(--space-1) var(--space-2);
-  font-size: var(--font-small);
-  cursor: pointer;
-}
-.hud-btn.on {
-  background: var(--color-accent);
-  color: var(--color-onAccent);
+.status-text { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.status .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--color-secondary); }
+.status.wait .dot { background: var(--color-warning); animation: pulse 1.6s infinite; }
+.status.off { color: var(--color-dangerText); }
+.status.off .dot { background: var(--color-danger); }
+.date { flex: none; font-size: 13px; color: var(--color-tertiary); white-space: nowrap; }
+.clock {
+  flex: none;
+  font-family: var(--font-number);
+  font-size: 22px;
   font-weight: 600;
+  color: var(--color-heading);
+  font-variant-numeric: tabular-nums;
 }
-.tools { display: flex; align-items: center; gap: var(--space-3); }
-.updated { font-size: var(--font-small); color: var(--color-secondary); font-variant-numeric: tabular-nums; }
-.hud-btn:hover { background: var(--color-hover); }
-.hud-btn.on:hover { background: var(--color-accentText); color: var(--color-onAccent); }
-.hud-btn:disabled { color: var(--color-secondary); cursor: default; }
+@keyframes pulse { 50% { opacity: 0.35; } }
+
 @media (max-width: 1599px) {
-  .topbar { gap: var(--space-4); padding-inline: var(--space-3); }
-  .titles h1 { font-size: var(--font-compactPage); }
-  .titles p { letter-spacing: 0; }
-  .kpis { gap: var(--space-4); }
-  .sim { display: none; }
-  .titles p::after { content: ' · 仿真数据'; }
+  .topbar { padding-inline: var(--space-4); }
+  .side.right { gap: var(--space-4); }
+  h1 { font-size: var(--font-compactPage); }
 }
 @media (max-width: 1279px) {
-  .topbar { flex-wrap: wrap; }
-  .brand { width: 100%; }
-  .kpis { flex: 1; margin: 0; }
+  .wing { display: none; }
+  .date { display: none; }
+  .tab { padding-inline: 44px; }
 }
 @media (max-width: 767px) {
-  .topbar { padding: var(--space-3); }
-  .titles h1 { font-size: var(--font-title); white-space: normal; }
-  .kpis { width: 100%; flex: auto; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
-  .kpi-value { font-size: var(--font-page); }
-  .kpi-label { letter-spacing: 0; }
-  .meta { width: 100%; align-items: flex-start; }
-  .tools { flex-wrap: wrap; }
+  .topbar { height: auto; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'title title' 'left right'; row-gap: 0; padding: 0 var(--space-3) var(--space-2); }
+  .title-zone { grid-area: title; }
+  .side.left { grid-area: left; }
+  .side.right { grid-area: right; }
+  .chev { display: none; }
+  .tab { padding-inline: 36px; }
+  h1 { font-size: var(--font-title); max-width: calc(100vw - 120px); }
+  .clock { font-size: var(--font-title); }
 }
 </style>
