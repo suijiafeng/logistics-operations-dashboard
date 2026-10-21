@@ -34,14 +34,15 @@ const vehicles = []
 for (let i = 0; i < VEHICLE_COUNT; i++) {
   const routeIdx = pick(routeBag)
   const dir = Math.random() < 0.5 ? 1 : -1
+  const dwelling = Math.random() < 0.06
   vehicles.push({
     routeIdx,
     dir,
-    t: Math.random(),
+    t: dwelling ? (dir === 1 ? 0 : 1) : Math.random(),
     // 速度：每秒推进的进度（与线路长度成反比，长途慢）；整体为演示加速
     speed: rand(0.004, 0.011) * (2.2 / Math.max(routeLengthDeg(routeIdx), 0.6)),
-    status: Math.random() < 0.06 ? STATUS.DWELL : STATUS.EN_ROUTE,
-    dwellUntil: 0,
+    status: dwelling ? STATUS.DWELL : STATUS.EN_ROUTE,
+    dwellUntil: dwelling ? Math.floor(rand(4, 20)) * 4 : 0,
     anomalyUntil: 0,
   })
 }
@@ -59,18 +60,30 @@ for (const h of HUBS) {
   }
 }
 
+function businessTime() {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', hourCycle: 'h23',
+  }).formatToParts(new Date())
+  const part = (type) => parts.find((p) => p.type === type).value
+  return { day: `${part('year')}-${part('month')}-${part('day')}`, hour: Number(part('hour')) }
+}
+
+const initialTime = businessTime()
 const state = {
   tick: 0,
-  ordersToday: 186_400 + Math.floor(rand(0, 4000)),
+  ordersToday: 0,
+  day: initialTime.day,
   onTimeRate: 97.8,
   pendingAnomalies: 0,
   events: [], // 待推送的异常事件
   eventSeq: 0,
-  // 24 小时运单趋势：按时段形态生成的基线 + 当前小时实时增长
+  // 今日分时：历史为仿真基线，当前小时为部分累计，未来小时不生成数据。
   trend: Array.from({ length: 24 }, (_, h) => {
+    if (h > initialTime.hour) return null
     const peak = (h >= 8 && h <= 11) || (h >= 14 && h <= 17) || (h >= 20 && h <= 22)
     const base = peak ? rand(9800, 14200) : h >= 0 && h <= 5 ? rand(900, 2600) : rand(4200, 8600)
-    return Math.floor(base)
+    return Math.floor(base * (h === initialTime.hour ? new Date().getUTCMinutes() / 60 : 1))
   }),
   modes: [
     { name: '干线运输', value: 46 },
@@ -85,6 +98,18 @@ const state = {
     { name: '延误 >6h', value: 2 },
   ],
 }
+state.ordersToday = state.trend.reduce((sum, value) => sum + (value ?? 0), 0)
+
+function syncBusinessDay() {
+  const current = businessTime()
+  if (state.day !== current.day) {
+    state.day = current.day
+    state.trend = Array(24).fill(null)
+    state.ordersToday = 0
+  }
+  for (let hour = 0; hour <= current.hour; hour++) state.trend[hour] ??= 0
+  return current.hour
+}
 
 const EVENT_TEMPLATES = [
   ['延误', '受前方路段缓行影响，预计延误'],
@@ -94,15 +119,17 @@ const EVENT_TEMPLATES = [
   ['网点积压', '目的网点分拣积压，到站后需排队卸货'],
 ]
 
-function pushEvent(vehicle, hubName) {
+function pushEvent(vehicle) {
+  const [aId, bId] = ROUTES[vehicle.routeIdx]
+  const [from, to] = vehicle.dir === 1 ? [aId, bId] : [bId, aId]
   const [type, desc] = pick(EVENT_TEMPLATES)
   const plate = `粤${pick('ABCDEFGHJKLMNPRSTUV')}·${String(Math.floor(rand(10000, 99999)))}`
   state.events.push({
     id: ++state.eventSeq,
-    time: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
+    time: new Date().toLocaleTimeString('zh-CN', { hour12: false, timeZone: 'Asia/Shanghai' }),
     type,
     vehicle: plate,
-    place: hubName,
+    place: `${hubById[from].name} → ${hubById[to].name}`,
     desc: `${desc}${type === '延误' ? ` ${Math.floor(rand(20, 140))} 分钟` : ''}`,
     level: type === '车辆故障' ? 2 : type === '偏航' ? 1 : 0,
   })
@@ -110,11 +137,13 @@ function pushEvent(vehicle, hubName) {
 }
 
 function vehiclePos(v) {
-  const t = v.dir === 1 ? v.t : 1 - v.t
-  return pointOnRoute(v.routeIdx, t)
+  // t 始终表示从线路起点到终点的几何进度；dir 只决定 t 增减方向。
+  // 反向车辆若再做 1-t，会导致画面位置与到站网点相反，并在换线时产生跳点。
+  return pointOnRoute(v.routeIdx, v.t)
 }
 
 export function step(dtMs) {
+  const hour = syncBusinessDay()
   const dt = dtMs / 1000
   state.tick++
   let activeAnomalies = 0
@@ -142,8 +171,7 @@ export function step(dtMs) {
       v.status = STATUS.ANOMALY
       v.anomalyUntil = now + Math.floor(rand(20, 90)) * 4 // tick=250ms → 20–90 秒
       state.pendingAnomalies++
-      const [aId, bId] = ROUTES[v.routeIdx]
-      pushEvent(v, `${hubById[aId].name} → ${hubById[bId].name}`)
+      pushEvent(v)
       continue
     }
     if (v.t >= 1 || v.t <= 0) {
@@ -154,7 +182,9 @@ export function step(dtMs) {
       hs.arrivals++
       // 积压缓慢漂移并钳制在合理区间，避免长时间运行后数值失真
       hs.backlog = Math.min(3000, Math.max(0, hs.backlog + Math.floor(rand(-4, 5))))
-      state.ordersToday += Math.floor(rand(1, 4))
+      const orders = Math.floor(rand(1, 4))
+      state.ordersToday += orders
+      state.trend[hour] += orders
       // 换线：新线路从到达 hub 出发，方向随线路定义调整
       const newRoute = nextRouteFrom(arrivedHub, v.routeIdx)
       v.routeIdx = newRoute
@@ -185,9 +215,6 @@ export function step(dtMs) {
       hs.utilization = Math.min(98, Math.max(30, hs.utilization + Math.floor(rand(-2, 3))))
       hs.onTime = Math.min(99.9, Math.max(90, hs.onTime + rand(-0.2, 0.2)))
     }
-    // 当前小时趋势桶缓慢增长并封顶，避免长时间演示后单桶失真
-    const hour = new Date().getHours()
-    state.trend[hour] = Math.min(16000, state.trend[hour] + Math.floor(rand(0, 4)))
     for (const m of state.modes) m.value = Math.max(5, m.value + Math.floor(rand(-1, 2)))
     const sum = state.modes.reduce((s, m) => s + m.value, 0)
     state.modes.forEach((m) => (m.value = Math.round((m.value / sum) * 100)))
@@ -219,6 +246,7 @@ let routeVolCache = routeVolumes()
 let routeVolAt = Date.now()
 
 export function snapshot() {
+  syncBusinessDay()
   routeVolCache = routeVolumes()
   routeVolAt = Date.now()
   return {
@@ -251,6 +279,7 @@ function kpi() {
 }
 
 export function delta() {
+  syncBusinessDay()
   if (Date.now() - routeVolAt > 30_000) {
     routeVolCache = routeVolumes()
     routeVolAt = Date.now()

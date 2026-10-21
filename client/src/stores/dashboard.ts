@@ -31,7 +31,7 @@ export interface SnapshotMsg {
   vehicles: number[]
   hubs: Hub[]
   kpi: Kpi
-  trend: number[]
+  trend: (number | null)[]
   modes: NameValue[]
   punctuality: NameValue[]
   routeVolumes: NameValue[]
@@ -43,7 +43,7 @@ export interface DeltaMsg {
   vehicles: number[]
   hubs: { id: string }[]
   kpi: Kpi
-  trend: number[]
+  trend: (number | null)[]
   modes: NameValue[]
   punctuality: NameValue[]
   routeVolumes: NameValue[]
@@ -55,6 +55,7 @@ export const useDashboardStore = defineStore('dashboard', {
     connected: false,
     connectionState: 'connecting' as 'connecting' | 'connected' | 'reconnecting' | 'error' | 'idle',
     connectionError: '',
+    dataAt: 0,
     vehicleCount: 0,
     // 扁平数组 [lng, lat, status] * N，由推送整包替换引用（不在响应式里逐项改）
     vehicles: [] as number[],
@@ -64,7 +65,7 @@ export const useDashboardStore = defineStore('dashboard', {
     chartVersion: 0,
     hubs: HUBS.map((h) => ({ ...h })) as Hub[],
     kpi: { enRoute: 0, ordersToday: 0, onTimeRate: 0, pendingAnomalies: 0 } as Kpi,
-    trend: [] as number[],
+    trend: [] as (number | null)[],
     modes: [] as NameValue[],
     punctuality: [] as NameValue[],
     routeVolumes: [] as NameValue[],
@@ -89,6 +90,7 @@ export const useDashboardStore = defineStore('dashboard', {
   },
   actions: {
     applySnapshot(msg: SnapshotMsg) {
+      this.dataAt = msg.ts
       this.vehicleCount = msg.vehicleCount
       this.vehicles = msg.vehicles
       this.hubs = msg.hubs
@@ -101,6 +103,7 @@ export const useDashboardStore = defineStore('dashboard', {
       this.chartVersion++
     },
     applyDelta(msg: DeltaMsg, payloadKB: number) {
+      this.dataAt = msg.ts
       this.vehicles = msg.vehicles
       // 网点统计按 id 合并，不整表替换（保留对象引用稳定）
       const byId = new Map(this.hubs.map((h) => [h.id, h]))
