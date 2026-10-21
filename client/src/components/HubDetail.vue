@@ -51,8 +51,8 @@ function jump(id: string) {
   <section v-if="hub && store.hasData" class="hub-detail" :class="store.detailSide" aria-label="网点详情">
     <header>
       <div class="titles">
-        <h4 :title="`${hub.name}分拨中心`">{{ hub.name }}分拨中心</h4>
-        <p>{{ LEVEL_TEXT[hub.level] ?? '网点' }}{{ GUANGDONG_HUB_IDS.has(hub.id) ? ' · 广东省' : '' }}</p>
+        <h4 :title="`${hub.name} · ${hub.site}`">{{ hub.name }} · {{ hub.site }}</h4>
+        <p :title="`${hub.lng.toFixed(5)}, ${hub.lat.toFixed(5)}（WGS84，OpenStreetMap 公开 POI）`">{{ LEVEL_TEXT[hub.level] ?? '网点' }}{{ GUANGDONG_HUB_IDS.has(hub.id) ? ' · 广东省' : '' }} · {{ hub.lng.toFixed(3) }}°E {{ hub.lat.toFixed(3) }}°N</p>
       </div>
       <button class="close" aria-label="关闭网点详情（Esc）" @click="store.selectHub(null)">×</button>
     </header>

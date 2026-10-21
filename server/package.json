@@ -1,1 +1,1 @@
-{"dependencies":{"ws":"^8.18.0"},"description":"模拟数据引擎：车辆沿干线插值移动、状态机、异常事件生成、1 秒聚合批量推送","name":"logistics-viz-server","private":true,"scripts":{"start":"node src/index.js"},"type":"module","version":"1.0.0"}
+{"dependencies":{"ws":"^8.18.0"},"description":"模拟数据引擎：车辆沿干线插值移动、状态机、异常事件生成、1 秒聚合批量推送","name":"logistics-viz-server","private":true,"scripts":{"start":"node src/index.js","test":"node --test test/*.test.js"},"type":"module","version":"1.0.0"}

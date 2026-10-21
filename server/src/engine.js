@@ -1,14 +1,20 @@
-// 仿真引擎：12000 台车辆沿干线运行
+// 仿真引擎：12000 台车辆沿干线真实道路折线运行（几何见 routes.js，由 OSRM 离线生成）
 // 状态机：EN_ROUTE（在途） → DWELL（到站装卸） → EN_ROUTE（换线） ；在途随机进入 ANOMALY（异常）
+// 车辆以公里为位置、km/h 为速度，仿真时钟按 TIME_SCALE 加速（1 真实秒 = 60 仿真秒），长途线路也能在几分钟内看到车辆走完。
 // 内部步进 250ms，聚合 1s 后批量推送 delta；车辆位置用扁平数组编码（[lng, lat, status] * N），不用对象数组，减小包体。
 
-import { HUBS, ROUTES, hubById, pointOnRoute, routeLengthDeg } from './network.js'
+import { HUBS, ROUTES, hubById } from './network.js'
+import { routeKm, pointAtKm, headingAtKm } from './routes.js'
 import { readMetrics, readModes, readHubHistory, readYesterdayTrend } from './metrics.js'
 
 export const VEHICLE_COUNT = 12000
 const STATUS = { EN_ROUTE: 0, DWELL: 1, ANOMALY: 2 }
 
+/** 仿真加速倍数：1 真实秒推进 60 仿真秒 */
+export const TIME_SCALE = 60
 const rand = (a, b) => a + Math.random() * (b - a)
+/** 干线货车巡航速度（km/h，仿真时钟口径） */
+const randSpeed = () => Math.round(rand(70, 95))
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)]
 
 // 线路按权重抽车辆
@@ -36,13 +42,14 @@ for (let i = 0; i < VEHICLE_COUNT; i++) {
   const routeIdx = pick(routeBag)
   const dir = Math.random() < 0.5 ? 1 : -1
   const dwelling = Math.random() < 0.06
+  const total = routeKm(routeIdx)
   vehicles.push({
     plate: `粤A·${String(10000 + i)}`,
     routeIdx,
     dir,
-    t: dwelling ? (dir === 1 ? 0 : 1) : Math.random(),
-    // 速度：每秒推进的进度（与线路长度成反比，长途慢）；整体为演示加速
-    speed: rand(0.004, 0.011) * (2.2 / Math.max(routeLengthDeg(routeIdx), 0.6)),
+    // km：沿干线从起点算起的里程（几何口径）；dir 只决定 km 增减方向
+    km: dwelling ? (dir === 1 ? 0 : total) : Math.random() * total,
+    speedKmh: randSpeed(),
     status: dwelling ? STATUS.DWELL : STATUS.EN_ROUTE,
     dwellUntil: dwelling ? Math.floor(rand(4, 20)) * 4 : 0,
     anomalyUntil: 0,
@@ -110,9 +117,25 @@ function pushEvent(vehicle) {
 }
 
 function vehiclePos(v) {
-  // t 始终表示从线路起点到终点的几何进度；dir 只决定 t 增减方向。
-  // 反向车辆若再做 1-t，会导致画面位置与到站网点相反，并在换线时产生跳点。
-  return pointOnRoute(v.routeIdx, v.t)
+  // km 始终是从线路起点算起的里程；反向车辆不做 total-km 翻转，否则画面位置与到站网点相反并在换线时跳点。
+  return pointAtKm(v.routeIdx, v.km)
+}
+
+/** 车辆实时详情（按需查询，不进 1Hz 增量包） */
+export function vehicleDetail(plate) {
+  const v = vehicles.find((item) => item.plate === plate)
+  if (!v) return null
+  const [aId, bId] = ROUTES[v.routeIdx]
+  const [fromId, toId] = v.dir === 1 ? [aId, bId] : [bId, aId]
+  const total = routeKm(v.routeIdx)
+  const remainingKm = v.dir === 1 ? total - v.km : v.km
+  return {
+    plate: v.plate, status: v.status, fromId, toId, routeIndex: v.routeIdx,
+    position: vehiclePos(v), heading: Math.round(headingAtKm(v.routeIdx, v.km, v.dir)),
+    speedKmh: v.status === STATUS.EN_ROUTE ? v.speedKmh : 0,
+    routeKm: Math.round(total), traveledKm: Math.round(total - remainingKm), remainingKm: Math.round(remainingKm),
+    etaMin: v.status === STATUS.EN_ROUTE ? Math.round(remainingKm / v.speedKmh * 60) : null,
+  }
 }
 
 export function step(dtMs) {
@@ -131,7 +154,7 @@ export function step(dtMs) {
     if (v.status === STATUS.DWELL) {
       if (now >= v.dwellUntil) {
         v.status = STATUS.EN_ROUTE
-        v.t = v.dir === 1 ? 0 : 1
+        v.km = v.dir === 1 ? 0 : routeKm(v.routeIdx)
       }
       continue
     }
@@ -143,8 +166,8 @@ export function step(dtMs) {
       }
       continue
     }
-    // 在途
-    v.t += v.speed * dt * v.dir
+    // 在途：按 km/h 乘以加速后的仿真时长推进里程
+    v.km += v.speedKmh * (dt * TIME_SCALE / 3600) * v.dir
     // 随机异常：单车每分钟概率约 0.4%（按 tick 时长 0.25s 换算每步概率）
     if (Math.random() < (0.004 / 60) * dt) {
       v.status = STATUS.ANOMALY
@@ -153,7 +176,7 @@ export function step(dtMs) {
       pushEvent(v)
       continue
     }
-    if (v.t >= 1 || v.t <= 0) {
+    if (v.km >= routeKm(v.routeIdx) || v.km <= 0) {
       // 到达终点 hub
       const [aId, bId] = ROUTES[v.routeIdx]
       const arrivedHub = v.dir === 1 ? bId : aId
@@ -167,12 +190,12 @@ export function step(dtMs) {
       const [na, nb] = ROUTES[newRoute]
       if (na === arrivedHub) {
         v.dir = 1
-        v.t = 0
+        v.km = 0
       } else if (nb === arrivedHub) {
         v.dir = -1
-        v.t = 1
+        v.km = routeKm(newRoute)
       }
-      v.speed = rand(0.004, 0.011) * (2.2 / Math.max(routeLengthDeg(newRoute), 0.6))
+      v.speedKmh = randSpeed()
       // 每台到车最终都会换线发出，发车计数与到车保持大体平衡
       hubStats[arrivedHub].departures++
       // 30% 概率在站内装卸停留 4–20 秒
@@ -198,9 +221,9 @@ function flatPositions() {
   const arr = new Array(VEHICLE_COUNT * 3)
   for (let i = 0; i < VEHICLE_COUNT; i++) {
     const [lng, lat] = vehiclePos(vehicles[i])
-    // 保留 3 位小数（约 100 米）：省级视图一像素约 1 公里，再高精度只增加包体
-    arr[i * 3] = Math.round(lng * 1000) / 1000
-    arr[i * 3 + 1] = Math.round(lat * 1000) / 1000
+    // 保留 5 位小数（约 1 米）：车辆沿真实道路行驶，城市级视图下 3 位小数会让车辆离开路面
+    arr[i * 3] = Math.round(lng * 1e5) / 1e5
+    arr[i * 3 + 1] = Math.round(lat * 1e5) / 1e5
     arr[i * 3 + 2] = vehicles[i].status
   }
   return arr

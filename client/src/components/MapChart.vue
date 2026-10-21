@@ -8,6 +8,7 @@ import { useMediaQuery } from '../services/useMediaQuery'
 import { useDashboardStore } from '../stores/dashboard'
 import { fmtInt } from '../services/format'
 import { HUBS, ROUTES, hubById } from '../data/network'
+import { routeCoords as routeGeometry, loadRoutes } from '../services/geo'
 import chinaGeo from '../assets/geo/china.json'
 
 const store = useDashboardStore()
@@ -172,17 +173,9 @@ function hitData() {
   return coarse.value ? visibleHubs().map((hub) => ({ name: hub.name, hubId: hub.id, value: [hub.lng, hub.lat] })) : []
 }
 
+// 干线为 OSRM 生成的真实道路折线，按当前视图抽稀（全国约 1 公里、广东约 100 米）
 function routeCoords(index: number) {
-  const [a, b] = ROUTES[index]
-  const start = hubById[a], end = hubById[b]
-  const bend = (index % 2 === 0 ? 1 : -1) * (0.08 + (index % 5) * 0.02)
-  const cx = (start.lng + end.lng) / 2 - (end.lat - start.lat) * bend
-  const cy = (start.lat + end.lat) / 2 + (end.lng - start.lng) * bend
-  return Array.from({ length: 25 }, (_, i) => {
-    const t = i / 24, u = 1 - t
-    return [u * u * start.lng + 2 * u * t * cx + t * t * end.lng,
-      u * u * start.lat + 2 * u * t * cy + t * t * end.lat]
-  })
+  return routeGeometry(index, store.view)
 }
 
 function eventRouteData() {
@@ -202,7 +195,8 @@ function eventPositionData() {
 }
 
 function hubTooltip(p: { data?: { name?: string; hubId?: string } }) {
-  return `网点：${p.data?.name ?? ''}（${p.data?.hubId === store.selectedHubId ? '已选中' : '点击查看详情'}）`
+  const site = p.data?.hubId ? hubById[p.data.hubId]?.site : ''
+  return `网点：${p.data?.name ?? ''}${site ? ` · ${site}` : ''}（${p.data?.hubId === store.selectedHubId ? '已选中' : '点击查看详情'}）`
 }
 
 function updateSelection() {
@@ -361,7 +355,7 @@ async function rebuildMap() {
   window.clearTimeout(feedTimer)
   window.clearTimeout(transitionTimer)
   try {
-    if (store.view === 'guangdong') await ensureGuangdong()
+    await Promise.all([loadRoutes(), store.view === 'guangdong' ? ensureGuangdong() : undefined])
     if (disposed || version !== buildVersion || chart.value !== c) return
     c.setOption(baseOption(), { notMerge: true })
     progressiveFeed()

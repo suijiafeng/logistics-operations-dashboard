@@ -3,7 +3,7 @@
 import http from 'node:http'
 import zlib from 'node:zlib'
 import { WebSocketServer } from 'ws'
-import { step, snapshot, delta } from './engine.js'
+import { step, snapshot, delta, vehicleDetail } from './engine.js'
 
 const PORT = process.env.PORT || 8787
 const configuredMaxBuffered = Number(process.env.WS_MAX_BUFFERED_BYTES || 1_000_000)
@@ -34,6 +34,16 @@ const server = http.createServer((req, res) => {
       res.setHeader('Content-Type', 'application/json')
       res.end(JSON.stringify({ error: 'snapshot_unavailable' }))
     }
+    return
+  }
+  // 单车详情按需查询：/vehicles/粤A·10000（URL 编码），不进 1Hz 增量包
+  if (req.url?.startsWith('/vehicles/')) {
+    let plate = ''
+    try { plate = decodeURIComponent(req.url.slice('/vehicles/'.length).split('?')[0]) } catch { plate = '' }
+    const detail = plate ? vehicleDetail(plate) : null
+    res.setHeader('Content-Type', 'application/json')
+    if (!detail) { res.statusCode = 404; res.end(JSON.stringify({ error: 'vehicle_not_found' })); return }
+    res.end(JSON.stringify({ ...detail, ts: Date.now() }))
     return
   }
   if (req.url === '/health') {
