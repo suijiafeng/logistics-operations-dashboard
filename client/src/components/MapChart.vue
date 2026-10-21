@@ -196,7 +196,7 @@ function eventRouteData() {
 function eventPositionData() {
   const event = store.activeEvent
   if (!event?.position || !inView(event.position[0], event.position[1])) return []
-  return [{ name: `事件发生位置 · ${event.vehicle}`, value: event.position }]
+  return [{ name: event.vehicle, value: event.position }]
 }
 
 function hubTooltip(p: { data?: { name?: string; hubId?: string } }) {
@@ -333,8 +333,9 @@ function baseOption() {
       {
         id: 'event-position', type: 'scatter', coordinateSystem: 'geo', zlevel: 6,
         symbol: 'pin', symbolSize: 30, itemStyle: { color: RED },
-        label: { show: true, formatter: '{b}', position: 'top', color: COLORS.dangerText, fontSize: FONT.small },
-        tooltip: { formatter: '事件发生位置（不是实时车辆追踪）' }, data: eventPositionData(),
+        label: { show: true, formatter: '{b}', position: 'top', distance: 4, color: COLORS.heading, fontSize: 11,
+          backgroundColor: 'rgba(87, 32, 29, 0.92)', borderColor: RED, borderWidth: 1, borderRadius: 3, padding: [2, 6] },
+        tooltip: { formatter: (p: { name: string }) => `事件发生位置 · ${p.name}<br/>（事件发生时的位置，不是实时车辆追踪）` }, data: eventPositionData(),
       },
     ],
   }

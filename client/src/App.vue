@@ -62,7 +62,11 @@ onBeforeUnmount(() => {
     <div class="screen" :class="{ 'motion-off': !store.decorationsOn, 'seam-safe': seamLayout }" :style="seamLayout">
       <div class="heading">
         <TopBar />
+      </div>
+      <!-- 顶部悬浮提示：数据状态与操作反馈都浮在顶栏下方居中，不占布局，避免断线抖动时整屏跳动 -->
+      <div class="top-stack">
         <FeedNotice />
+        <div v-if="store.notice && store.checkedAt - store.noticeAt < 5000" class="toast" role="status">{{ store.notice }}</div>
       </div>
       <main class="middle">
         <div class="col left">
@@ -83,7 +87,6 @@ onBeforeUnmount(() => {
         <WarehousePanel />
       </footer>
     </div>
-    <div v-if="store.notice && store.checkedAt - store.noticeAt < 5000" class="toast" role="status">{{ store.notice }}</div>
   </div>
 </template>
 
@@ -142,7 +145,23 @@ button:focus-visible, [role='button']:focus-visible {
 .scaled .screen { height: calc(var(--vh) * 100); }
 .kiosk { user-select: none; }
 .cursor-hidden, .cursor-hidden :deep(*) { cursor: none !important; }
-.toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); max-width: calc(var(--vw) * 100 - 32px); padding: 12px 20px; background: var(--color-panel); border: 1px solid var(--color-accent); border-radius: 8px; z-index: 200; }
+.top-stack {
+  position: absolute;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: min(760px, calc(100% - 32px));
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  z-index: 200;
+  pointer-events: none;
+}
+.top-stack > * { pointer-events: auto; box-shadow: var(--shadow-panel); }
+.toast { max-width: 100%; padding: 8px 16px; background: var(--color-overlay); border: 1px solid var(--color-accent); border-radius: var(--radius-panel); font-size: var(--font-body); color: var(--color-heading); overflow-wrap: anywhere; }
+@media (max-height: 820px) and (min-width: 1280px) { .top-stack { top: 76px; } }
+@media (max-width: 767px) { .top-stack { position: fixed; top: var(--space-2); } }
 .fit-contain .screen { max-width: 1920px; margin-inline: auto; }
 /* contain 内容宽不超过 1920：组件里的 --vw 也封顶在 19.2px（放大模式由 useScreenScale 按同样口径下发） */
 .fit-contain { --vw: min(1vw, 19.2px); }

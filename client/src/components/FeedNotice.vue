@@ -24,9 +24,10 @@ const message = computed(() => {
   display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4);
   padding: var(--space-2) var(--space-4); border-radius: var(--radius-panel);
   background: var(--color-infoBg); color: var(--color-text); font-size: var(--font-small);
+  border: 1px solid var(--color-border);
   overflow-wrap: anywhere;
 }
 .feed-notice strong { font-weight: 600; }
-.error { background: var(--color-dangerBg); color: var(--color-dangerText); }
-.stale { background: var(--color-warningBg); color: var(--color-warning); }
+.error { background: var(--color-dangerBg); color: var(--color-dangerText); border-color: rgba(240, 82, 77, 0.6); }
+.stale { background: var(--color-warningBg); color: var(--color-warning); border-color: rgba(232, 177, 60, 0.6); }
 </style>
