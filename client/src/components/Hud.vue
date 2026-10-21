@@ -16,7 +16,7 @@ const store = useDashboardStore()
     <div class="row"><span>画质 / DPR</span><b>{{ store.quality }} / {{ +store.renderDpr.toFixed(2) }}</b></div>
     <div class="row"><span>页面缩放</span><b>×{{ store.screenScale }}</b></div>
     <p v-if="store.qualityReason" class="quality-note">{{ store.qualityReason }}</p>
-    <div class="row"><span>增量包大小</span><b>{{ store.lastDeltaKB.toFixed(1) }} KB/s</b></div>
+    <div class="row" title="浏览器解压后的 JSON 大小；引擎开启消息压缩，实际传输约为三分之一"><span>增量包（解压后）</span><b>{{ store.lastDeltaKB.toFixed(1) }} KB/s</b></div>
     <div class="row"><span>推送延迟</span><b>{{ store.latencyMs }} ms</b></div>
     <div class="row"><span>已收增量包</span><b>{{ store.deltaCount }}</b></div>
   </div>

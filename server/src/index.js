@@ -1,6 +1,7 @@
 // 模拟数据引擎服务：HTTP 快照 + WebSocket 增量推送
 // 仿真步进 250ms；每 1s 向所有客户端广播一条 delta（车辆位置扁平数组 + KPI + 网点统计 + 新事件）
 import http from 'node:http'
+import zlib from 'node:zlib'
 import { WebSocketServer } from 'ws'
 import { step, snapshot, delta } from './engine.js'
 
@@ -16,8 +17,17 @@ const server = http.createServer((req, res) => {
     try {
       const body = JSON.stringify(snapshot())
       res.setHeader('Content-Type', 'application/json')
-      res.end(body)
-      console.log(`[snapshot] ${(body.length / 1024).toFixed(1)} KB`)
+      res.setHeader('Vary', 'Accept-Encoding')
+      // 快照约 230KB，车辆坐标数组重复度高，gzip 后约为三分之一
+      if (/\bgzip\b/.test(String(req.headers['accept-encoding'] || ''))) {
+        const zipped = zlib.gzipSync(body, { level: 1 })
+        res.setHeader('Content-Encoding', 'gzip')
+        res.end(zipped)
+        console.log(`[snapshot] ${(body.length / 1024).toFixed(1)} KB → gzip ${(zipped.length / 1024).toFixed(1)} KB`)
+      } else {
+        res.end(body)
+        console.log(`[snapshot] ${(body.length / 1024).toFixed(1)} KB`)
+      }
     } catch (error) {
       console.error('[snapshot] generate failed', error)
       res.statusCode = 500
@@ -35,7 +45,9 @@ const server = http.createServer((req, res) => {
   res.end('not found')
 })
 
-const wss = new WebSocketServer({ server })
+// 消息压缩（permessage-deflate，浏览器原生支持）：每秒增量包约 227KB → 约 85KB。
+// 按连接分别压缩，最快档每个连接每秒约多花 3–4ms CPU；小于 1KB 的消息不压缩
+const wss = new WebSocketServer({ server, perMessageDeflate: { zlibDeflateOptions: { level: 1 }, threshold: 1024 } })
 wss.on('connection', (ws) => {
   console.log('[ws] client connected, total =', wss.clients.size)
   ws.send(JSON.stringify({ type: 'hello', ts: Date.now() }))

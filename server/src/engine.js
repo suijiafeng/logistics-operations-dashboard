@@ -198,8 +198,9 @@ function flatPositions() {
   const arr = new Array(VEHICLE_COUNT * 3)
   for (let i = 0; i < VEHICLE_COUNT; i++) {
     const [lng, lat] = vehiclePos(vehicles[i])
-    arr[i * 3] = Math.round(lng * 10000) / 10000
-    arr[i * 3 + 1] = Math.round(lat * 10000) / 10000
+    // 保留 3 位小数（约 100 米）：省级视图一像素约 1 公里，再高精度只增加包体
+    arr[i * 3] = Math.round(lng * 1000) / 1000
+    arr[i * 3 + 1] = Math.round(lat * 1000) / 1000
     arr[i * 3 + 2] = vehicles[i].status
   }
   return arr
