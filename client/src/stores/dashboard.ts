@@ -57,6 +57,8 @@ export const useDashboardStore = defineStore('dashboard', {
     connectionError: '',
     reconnectAttempt: 0,
     dataAt: 0,
+    receivedAt: 0,
+    checkedAt: Date.now(),
     vehicleCount: 0,
     // 扁平数组 [lng, lat, status] * N，由推送整包替换引用（不在响应式里逐项改）
     vehicles: [] as number[],
@@ -74,12 +76,18 @@ export const useDashboardStore = defineStore('dashboard', {
     selectedHubId: null as string | null,
     view: 'china' as 'china' | 'guangdong',
     hudOn: false,
+    decorationsOn: true,
     lastDeltaKB: 0,
     lastDeltaAt: 0,
     latencyMs: 0,
     deltaCount: 0,
   }),
   getters: {
+    hasData(state): boolean { return state.receivedAt > 0 },
+    dataStatus(state): 'loading' | 'error' | 'stale' | 'ready' {
+      if (!state.receivedAt) return state.connectionError ? 'error' : 'loading'
+      return !state.connected || !!state.connectionError || state.checkedAt - state.receivedAt > 5000 ? 'stale' : 'ready'
+    },
     selectedHub(state): Hub | undefined {
       return state.hubs.find((h) => h.id === state.selectedHubId)
     },
@@ -91,6 +99,8 @@ export const useDashboardStore = defineStore('dashboard', {
   },
   actions: {
     applySnapshot(msg: SnapshotMsg) {
+      this.receivedAt = this.checkedAt = Date.now()
+      this.connectionError = ''
       this.dataAt = msg.ts
       this.vehicleCount = msg.vehicleCount
       this.vehicles = msg.vehicles
@@ -104,6 +114,8 @@ export const useDashboardStore = defineStore('dashboard', {
       this.chartVersion++
     },
     applyDelta(msg: DeltaMsg, payloadKB: number) {
+      this.receivedAt = this.checkedAt = Date.now()
+      this.connectionError = ''
       this.dataAt = msg.ts
       this.vehicles = msg.vehicles
       // 网点统计按 id 合并，不整表替换（保留对象引用稳定）
