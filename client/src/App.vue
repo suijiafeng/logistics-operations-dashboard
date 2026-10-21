@@ -216,8 +216,16 @@ button:focus-visible, [role='button']:focus-visible {
   .right { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
 }
 @media (min-width: 2000px) {
-  .seam-safe .middle { grid-template-columns: var(--seam-left) var(--seam-center) var(--seam-right); gap: 24px; }
+  /* 拼缝模式：中部与底部直接落在三屏网格里，左列向下延伸占满左屏，排行占中屏底部、仓配占右屏底部，
+     各面板宽度等于所在屏的安全区，不再把两个底部面板挤进中屏 */
+  .seam-safe { grid-template-columns: var(--seam-left) var(--seam-center) var(--seam-right); column-gap: 24px; }
+  .seam-safe .heading { grid-column: 1 / -1; }
+  .seam-safe .middle, .seam-safe .bottom { display: contents; }
+  .seam-safe .left { grid-column: 1; grid-row: 2 / 4; }
+  .seam-safe .middle > :deep(.map-wrap) { grid-column: 2; grid-row: 2; }
+  .seam-safe .right { grid-column: 3; grid-row: 2; }
+  .seam-safe .bottom > :first-child { grid-column: 2; grid-row: 3; }
+  .seam-safe .bottom > :last-child { grid-column: 3; grid-row: 3; }
   .seam-safe :deep(.topbar) { grid-template-columns: var(--seam-left) var(--seam-center) var(--seam-right); gap: 24px; padding-inline: 0; }
-  .seam-safe .bottom { margin-left: calc(var(--seam-left) + 24px); margin-right: calc(var(--seam-right) + 24px); }
 }
 </style>
