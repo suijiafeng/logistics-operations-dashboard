@@ -94,6 +94,7 @@ function validStats(value: Record<string, unknown>, fullHubs: boolean) {
     optional(value.routeOrders, items => Array.isArray(items) && items.length === ROUTES.length && items.every(n => finite(n) && n >= 0)) &&
     Array.isArray(value.hubs) && value.hubs.every(h => validHub(h, fullHubs)) &&
     optional(value.eventSeq, n => Number.isInteger(n) && (n as number) >= 0) &&
+    optional(value.evictedMaxId, n => Number.isInteger(n) && (n as number) >= 0) &&
     (events === undefined || Array.isArray(events) && events.every(validEvent)) &&
     optional(value.alertUpdates, items => Array.isArray(items) && items.every(validEvent)) &&
     optional(value.shipments, s => isRecord(s) && Array.isArray(s.stages) && s.stages.length === 5 && s.stages.every(isString) &&

@@ -93,6 +93,8 @@ const state = {
   events: [], // 待推送的异常事件
   history: [],
   eventSeq: 0,
+  /** 已从告警表淘汰的最大事件 id：小于等于它的事件可能已拿不到，快照与补收据此判断历史是否完整 */
+  evictedMaxId: 0,
   /** 全部未过期告警：id → 事件对象（与 history 中同一引用） */
   alerts: new Map(),
   /** 本轮状态有变化的告警，随 delta 推送后清空 */
@@ -182,7 +184,10 @@ function recoverAlertById(alert, now) {
 function sweepAlerts(now) {
   for (const alert of state.alerts.values()) {
     if (alert.status !== 'closed' && alert.recoveredAt && now - alert.recoveredAt > AUTO_CLOSE_MS) closeAlert(alert, '系统 · 恢复后超时未处置', now)
-    if (alert.status === 'closed' && now - alert.closedAt > ALERT_RETAIN_MS) state.alerts.delete(alert.id)
+    if (alert.status === 'closed' && now - alert.closedAt > ALERT_RETAIN_MS) {
+      state.alerts.delete(alert.id)
+      if (alert.id > state.evictedMaxId) state.evictedMaxId = alert.id
+    }
   }
   // 事件列表只保留仍在告警表里的记录：已关闭超过保留期的按绝对时间淘汰，不随日切清空
   if (state.history.some((e) => !state.alerts.has(e.id))) state.history = state.history.filter((e) => state.alerts.has(e.id))
@@ -435,6 +440,8 @@ export function snapshot() {
     ts: Date.now(),
     // 事件游标：客户端订阅时带回，补收快照之后、订阅之前广播掉的事件
     eventSeq: state.eventSeq,
+    // 小于等于该 id 的事件可能已淘汰：客户端上次游标落在它之前时，离线期间的历史不完整
+    evictedMaxId: state.evictedMaxId,
     vehicleCount: VEHICLE_COUNT,
     vehicles: flatPositions(),
     hubs: serialHubs(true),
@@ -474,20 +481,18 @@ export function eventCursor() {
 
 /**
  * 补收：从告警表取 id 大于 sinceEventId 的全部告警（旧到新，未关闭的不受 60 条窗口限制），以及在此之前创建但
- * sinceUpdatedAt 之后有过状态变更的告警。告警表只保留已关闭不超过 1 小时的记录：游标之前还有已淘汰的事件时标记 truncated，
- * 由客户端提示历史不完整。
+ * sinceUpdatedAt 之后有过状态变更的告警。告警表只保留已关闭不超过 1 小时的记录：游标落在已淘汰的最大 id 之前时标记 truncated
+ * （中间缺口同样算），由客户端提示历史不完整。
  */
 export function catchUp(sinceEventId, sinceUpdatedAt) {
   const events = []
   const alertUpdates = []
-  let oldestKept = state.eventSeq + 1
   for (const alert of state.alerts.values()) {
-    if (alert.id < oldestKept) oldestKept = alert.id
     if (alert.id > sinceEventId) events.push(alert)
     else if (alert.updatedAt >= sinceUpdatedAt) alertUpdates.push(alert)
   }
   events.sort((a, b) => a.id - b.id)
-  const truncated = sinceEventId + 1 < oldestKept
+  const truncated = sinceEventId < state.evictedMaxId
   return { type: 'catchup', engineId, ts: Date.now(), events, alertUpdates, truncated }
 }
 

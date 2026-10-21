@@ -15,9 +15,11 @@ export function useDisplayRuntime() {
   // 刷新后的新页面在同一分钟内不会再次触发；两处都读不到时才退回内存，不抛错
   const REFRESH_KEY = 'logistics-refreshed-at'
   const NAME_PREFIX = `${REFRESH_KEY}=`
+  // 两处都读，取较新的一条（「YYYY-MM-DD HH:MM」可直接按字符串比较）：存储里可能是昨天的旧值而今天只写成功了 window.name
   let refreshedAt = ''
   try { refreshedAt = sessionStorage.getItem(REFRESH_KEY) ?? '' } catch { refreshedAt = '' }
-  if (!refreshedAt && window.name.startsWith(NAME_PREFIX)) refreshedAt = window.name.slice(NAME_PREFIX.length)
+  const named = window.name.startsWith(NAME_PREFIX) ? window.name.slice(NAME_PREFIX.length) : ''
+  if (named > refreshedAt) refreshedAt = named
   const params = new URLSearchParams(location.search)
   const refresh = params.get('refresh')
   async function acquireWake() {

@@ -112,6 +112,8 @@ export interface SnapshotMsg {
   safety?: SafetyStats
   /** 引擎事件游标：订阅时带回，补收快照之后广播掉的事件 */
   eventSeq?: number
+  /** 引擎已淘汰的最大事件 id：上次游标落在它之前说明离线期间历史不完整 */
+  evictedMaxId?: number
 }
 
 /** 订阅补收：快照（或被跳过的增量）之后到订阅之间的新事件与告警状态变更 */
@@ -289,11 +291,16 @@ export const useDashboardStore = defineStore('dashboard', {
       if (msg.shipments) this.shipments = msg.shipments
       if (msg.cold) this.cold = msg.cold
       if (msg.safety) this.safety = msg.safety
-      // 重连后的新快照：若上次游标之后的事件在快照里已不连续（中间的已被引擎淘汰），说明离线期间漏掉的超出保留窗口，
-      // 此时订阅补收也拿不回来，这里直接提示；游标随后前移，不再重复提示
+      // 重连后的新快照（同一代引擎）：快照带全部未关闭告警，本地未关闭却不在快照里的，是离线期间已关闭并被淘汰的，直接清掉，不留幽灵告警
       const previousCursor = this.eventCursor
+      if (msg.events && previousCursor > 0) {
+        const present = new Set(msg.events.map((e) => e.id))
+        this.events = this.events.filter((e) => e.status === 'closed' || present.has(e.id))
+        if (this.activeEvent && this.activeEvent.status !== 'closed' && !present.has(this.activeEvent.id)) this.activeEvent = null
+      }
       if (msg.events) this.mergeEvents(msg.events)
-      if (previousCursor > 0 && msg.events?.length && Math.min(...msg.events.map((e) => e.id)) > previousCursor + 1) {
+      // 引擎报告已淘汰的最大事件 id：上次游标落在它之前，离线期间就有拿不回的事件（含中间缺口），订阅补收也补不到，直接提示
+      if (previousCursor > 0 && typeof msg.evictedMaxId === 'number' && previousCursor < msg.evictedMaxId) {
         this.notify('离线期间的事件超过引擎保留窗口，告警历史可能不完整')
       }
       if (typeof msg.eventSeq === 'number') this.eventCursor = Math.max(this.eventCursor, msg.eventSeq)

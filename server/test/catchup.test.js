@@ -59,9 +59,12 @@ test('快照与补收都带全部未关闭告警，不受 60 条窗口限制；�
     for (let i = 0; i < 4; i++) step(250)
     const after = catchUp(0, 0)
     for (const e of closed) assert(!after.events.some((x) => x.id === e.id), `已淘汰的告警 ${e.id} 不应再补发`)
-    const oldest = Math.min(...after.events.map((e) => e.id))
-    assert.equal(after.truncated, oldest > 1)
-    if (!all.events.some((e) => e.id === 1 && e.status !== 'closed')) assert.equal(after.truncated, true)
+    const evicted = Math.max(...closed.map((e) => e.id))
+    assert.equal(snapshot().evictedMaxId >= evicted, true)
+    assert.equal(after.truncated, true)
+    // 游标落在最大淘汰 id 之后才算完整，哪怕中间还有更早的未关闭告警仍在
+    assert.equal(catchUp(evicted - 1, 0).truncated, true)
+    assert.equal(catchUp(snapshot().evictedMaxId, 0).truncated, false)
   } finally {
     Date.now = realNow
   }
