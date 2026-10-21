@@ -9,7 +9,7 @@ import { useDashboardStore, LAYER_KEYS, ALERT_STATUS_TEXT, isAlertOpen, type Lay
 import { useFocus } from '../services/useFocus'
 import { fmtInt } from '../services/format'
 import { HUBS, ROUTES, hubById, hubsInProvince } from '../data/network'
-import { provinceByName } from '../data/provinces'
+import { provinceByName, PROVINCES } from '../data/provinces'
 import { routeCoords as routeGeometry, loadRoutes } from '../services/geo'
 import { loadRegion, geoAspect, type Region, type Geo } from '../services/region'
 import { plateOf, indexOfPlate, statusOf, routeOf, kindOf } from '../services/vehicles'
@@ -127,6 +127,9 @@ function vehicleSeriesData(limit: number) {
   const total = Math.min(limit, store.vehicleCount, Math.floor(flat.length / 3))
   const budget = store.quality === 'full' ? total : store.quality === 'balanced' ? 6000 : 3000
   const stride = Math.max(1, Math.ceil(total / budget))
+  // 降档采样按车辆下标的稳定哈希取样，而不是 i % stride：输入若按区域 / 线路排序（如某省车辆全在奇数下标），
+  // 取模会整层漏掉；哈希与下标奇偶无关，任何子集都按约 1/stride 保留，且同一台车各帧取舍一致不闪
+  const sampled = (i: number) => stride === 1 || (Math.imul(i + 1, 0x9E3779B1) >>> 16) % stride === 0
   const counts: [number, number, number] = [0, 0, 0]
   const on = STATUS_LAYER.map((key) => store.layers[key])
   const focusRoute = store.selectedRouteIndex
@@ -140,10 +143,10 @@ function vehicleSeriesData(limit: number) {
     if (status >= 0 && status <= 2) counts[status as 0 | 1 | 2]++
     if (!on[status]) continue
     if (focusRoute !== null && routeOf(code) !== focusRoute) {
-      if (i % stride === 0) groups[3]!.push([lng, lat, i])
+      if (sampled(i)) groups[3]!.push([lng, lat, i])
       continue
     }
-    if (status === 0 && i % stride !== 0) continue
+    if (status === 0 && !sampled(i)) continue
     if (coldOn && status !== 2 && kindOf(code) === 1) { groups[4]!.push([lng, lat, i]); continue }
     groups[status]?.push([lng, lat, i])
   }
@@ -646,6 +649,14 @@ function drillTo(adcode: string) {
   store.clearSelection()
   store.setView(adcode)
 }
+// 键盘下钻入口：全国视图面包屑里的省份下拉（Tab 可达），有网点的省份排在前面并标注网点数；鼠标点地图入口照旧
+const provinceOptions = PROVINCES.map((p) => ({ adcode: p.adcode, name: p.name, hubs: hubsInProvince(p.adcode).length }))
+  .sort((a, b) => b.hubs - a.hubs || a.adcode.localeCompare(b.adcode))
+function drillBySelect(event: Event) {
+  const select = event.target as HTMLSelectElement
+  if (select.value) drillTo(select.value)
+  select.value = ''
+}
 
 /** 鼠标附近 radius 像素内最近的车辆下标（large 模式散点不产生图表点击事件，自行就近拾取），没有返回 -1 */
 function nearestVehicle(x: number, y: number, radius: number) {
@@ -837,7 +848,11 @@ watch(
         <span class="sep">›</span><b>{{ store.viewName }}</b>
       </template>
       <template v-else>
-        <b>全国</b><span class="sep">›</span><span class="hint">点击任意省份下钻</span>
+        <b>全国</b><span class="sep">›</span>
+        <select class="crumb-select" aria-label="选择省份下钻" title="点击地图任意省份或在此选择省份下钻" @change="drillBySelect">
+          <option value="">点击任意省份下钻</option>
+          <option v-for="p in provinceOptions" :key="p.adcode" :value="p.adcode">{{ p.name }}{{ p.hubs ? ` · ${p.hubs} 网点` : '' }}</option>
+        </select>
       </template>
     </nav>
     <form class="search" role="search" :class="{ shifted: drawerOpen }" @submit.prevent="search">
@@ -903,6 +918,21 @@ watch(
 .crumb b { font-size: 18px; font-weight: 700; color: var(--color-heading); }
 .crumb .sep { color: var(--color-tertiary); }
 .crumb .hint { font-size: 13px; color: var(--color-tertiary); overflow: hidden; text-overflow: ellipsis; }
+/* 省份下拉与提示文字同样式：无边框、同色，聚焦时显示焦点环 */
+.crumb-select {
+  max-width: 100%;
+  padding: 0 2px;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: var(--color-tertiary);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.crumb-select:hover { color: var(--color-heading); }
+.crumb-select:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; color: var(--color-heading); }
+.crumb-select option { background: var(--color-panel); color: var(--color-text); }
 .crumb-link {
   min-height: 0;
   min-width: 0;

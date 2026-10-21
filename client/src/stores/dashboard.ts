@@ -279,7 +279,8 @@ export const useDashboardStore = defineStore('dashboard', {
       this.hubs = msg.hubs
       this.kpi = msg.kpi
       this.trend = msg.trend
-      if (msg.trendYesterday) this.trendYesterday = msg.trendYesterday
+      // 快照是完整状态：缺少昨日对照就清空，不沿用上一代引擎的值
+      this.trendYesterday = msg.trendYesterday ?? []
       this.modes = msg.modes
       this.punctuality = msg.punctuality
       this.routeVolumes = msg.routeVolumes
@@ -402,6 +403,7 @@ export const useDashboardStore = defineStore('dashboard', {
         this.events = []
         this.eventCursor = 0
         this.alertCursor = 0
+        this.trendYesterday = []
         this.activeEvent = null
         this.selectedHubId = null
         this.selectedRouteIndex = null
