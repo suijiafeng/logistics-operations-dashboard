@@ -30,18 +30,33 @@ function hasKpi(value: unknown) {
   )
 }
 
-function validStats(value: Record<string, unknown>) {
-  const numbers = (items: unknown) => Array.isArray(items) && items.every(n => typeof n === 'number' && Number.isFinite(n) && n >= 0)
-  const named = (items: unknown) => Array.isArray(items) && items.every(n => isRecord(n) && typeof n.name === 'string' && typeof n.value === 'number' && Number.isFinite(n.value))
+const finite = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n)
+const optional = (v: unknown, check: (v: unknown) => boolean) => v === undefined || check(v)
+const isString = (v: unknown) => typeof v === 'string'
+
+// 校验覆盖界面实际读取的每个字段：网点统计会直接参与 toFixed / 格式化 / 排序，类型不对会在渲染时报错
+function validHub(h: unknown, full: boolean) {
+  if (!isRecord(h) || typeof h.id !== 'string') return false
+  const identity = full
+    ? isString(h.name) && finite(h.lng) && finite(h.lat) && finite(h.level)
+    : optional(h.name, isString) && optional(h.lng, finite) && optional(h.lat, finite) && optional(h.level, finite)
+  return identity &&
+    ['arrivals', 'departures', 'backlog', 'utilization', 'onTime'].every(k => optional(h[k], n => finite(n) && n >= 0)) &&
+    optional(h.recentOrders, items => Array.isArray(items) && items.every(n => finite(n) && n >= 0)) &&
+    optional(h.recentLabels, items => Array.isArray(items) && items.every(isString))
+}
+
+function validStats(value: Record<string, unknown>, fullHubs: boolean) {
+  const named = (items: unknown) => Array.isArray(items) && items.every(n => isRecord(n) && isString(n.name) && finite(n.value) &&
+    ['id', 'fromId', 'toId'].every(k => optional(n[k], isString)))
   const events = value.events
-  return Array.isArray(value.trend) && value.trend.length === 24 && value.trend.every(n => n === null || typeof n === 'number' && Number.isFinite(n) && n >= 0) &&
+  return Array.isArray(value.trend) && value.trend.length === 24 && value.trend.every(n => n === null || finite(n) && n >= 0) &&
     ['modes', 'punctuality', 'routeVolumes'].every(k => named(value[k])) &&
-    Array.isArray(value.hubs) && value.hubs.every(h => isRecord(h) && typeof h.id === 'string' &&
-      (h.recentOrders === undefined || numbers(h.recentOrders)) &&
-      (h.recentLabels === undefined || Array.isArray(h.recentLabels) && h.recentLabels.every(s => typeof s === 'string'))) &&
-    (events === undefined || Array.isArray(events) && events.every(e => isRecord(e) && typeof e.id === 'number' && Number.isFinite(e.id) &&
-      ['time', 'type', 'vehicle', 'place', 'desc'].every(k => typeof e[k] === 'string') && typeof e.level === 'number' &&
-      (e.position === undefined || Array.isArray(e.position) && e.position.length === 2 && e.position.every(n => typeof n === 'number' && Number.isFinite(n)))))
+    Array.isArray(value.hubs) && value.hubs.every(h => validHub(h, fullHubs)) &&
+    (events === undefined || Array.isArray(events) && events.every(e => isRecord(e) && finite(e.id) &&
+      ['time', 'type', 'vehicle', 'place', 'desc'].every(k => isString(e[k])) && finite(e.level) &&
+      ['fromId', 'toId'].every(k => optional(e[k], isString)) && optional(e.routeIndex, finite) &&
+      optional(e.position, p => Array.isArray(p) && p.length === 2 && p.every(finite))))
 }
 
 function isSnapshotMsg(value: unknown): value is SnapshotMsg {
@@ -54,7 +69,7 @@ function isSnapshotMsg(value: unknown): value is SnapshotMsg {
     return false
   }
   return (
-    typeof value.ts === 'number' && Number.isFinite(value.ts) && validStats(value) &&
+    typeof value.ts === 'number' && Number.isFinite(value.ts) && validStats(value, true) &&
     Array.isArray(value.vehicles) &&
     value.vehicles.length === value.vehicleCount * 3 &&
     value.vehicles.every((item) => typeof item === 'number' && Number.isFinite(item)) &&
@@ -70,7 +85,7 @@ function isSnapshotMsg(value: unknown): value is SnapshotMsg {
 function isDeltaMsg(value: unknown): value is DeltaMsg {
   if (!isRecord(value) || value.type !== 'delta') return false
   return (
-    typeof value.ts === 'number' && Number.isFinite(value.ts) && validStats(value) &&
+    typeof value.ts === 'number' && Number.isFinite(value.ts) && validStats(value, false) &&
     Array.isArray(value.vehicles) &&
     value.vehicles.length % 3 === 0 &&
     value.vehicles.every((item) => typeof item === 'number' && Number.isFinite(item)) &&
