@@ -289,7 +289,13 @@ export const useDashboardStore = defineStore('dashboard', {
       if (msg.shipments) this.shipments = msg.shipments
       if (msg.cold) this.cold = msg.cold
       if (msg.safety) this.safety = msg.safety
+      // 重连后的新快照：若上次游标之后的事件在快照里已不连续（中间的已被引擎淘汰），说明离线期间漏掉的超出保留窗口，
+      // 此时订阅补收也拿不回来，这里直接提示；游标随后前移，不再重复提示
+      const previousCursor = this.eventCursor
       if (msg.events) this.mergeEvents(msg.events)
+      if (previousCursor > 0 && msg.events?.length && Math.min(...msg.events.map((e) => e.id)) > previousCursor + 1) {
+        this.notify('离线期间的事件超过引擎保留窗口，告警历史可能不完整')
+      }
       if (typeof msg.eventSeq === 'number') this.eventCursor = Math.max(this.eventCursor, msg.eventSeq)
       this.alertCursor = msg.ts
       this.mapVersion++
@@ -419,7 +425,9 @@ export const useDashboardStore = defineStore('dashboard', {
         if (!known || (event.updatedAt ?? 0) >= (known.updatedAt ?? 0)) all.set(event.id, event)
         if (event.id > this.eventCursor) this.eventCursor = event.id
       }
-      this.events = [...all.values()].sort((a, b) => b.id - a.id).slice(0, 60)
+      // 未关闭的告警全部保留（待处理数必须能逐条看到并处置），已关闭的只留最近 60 条
+      let closed = 0
+      this.events = [...all.values()].sort((a, b) => b.id - a.id).filter((event) => event.status !== 'closed' || ++closed <= 60)
       if (this.activeEvent) {
         const latest = all.get(this.activeEvent.id)
         if (latest && latest !== this.activeEvent) this.activeEvent = { ...this.activeEvent, ...latest }

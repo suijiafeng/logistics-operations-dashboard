@@ -41,11 +41,30 @@ test('快照与订阅之间广播掉的事件可按游标补收，已收到的�
   assert.deepEqual([empty.events.length, empty.alertUpdates.length, empty.truncated], [0, 0, false])
 })
 
-test('游标早于保留窗口时标记 truncated', () => {
+test('快照与补收都带全部未关闭告警，不受 60 条窗口限制；告警淘汰后游标过旧才标记 truncated', () => {
   runUntilNewEvents(70)
-  const old = catchUp(0, 0)
-  assert.equal(old.truncated, true)
-  assert(old.events.length <= 60)
+  const snap = snapshot()
+  const open = snap.events.filter((e) => e.status !== 'closed').length
+  assert.equal(open, snap.kpi.pendingAnomalies, '待处理数必须等于列表里未关闭告警数')
+  assert(snap.events.filter((e) => e.status === 'closed').length <= 60)
+  const all = catchUp(0, 0)
+  assert.equal(all.truncated, false)
+  assert(all.events.filter((e) => e.status !== 'closed').length >= open, '补收覆盖全部未关闭告警')
+  // 两小时后已关闭告警按保留期淘汰（每 4 步清理一次），再从 0 补收就拿不回它们；最早的告警被淘汰时标记 truncated
+  const closed = snap.events.filter((e) => e.status === 'closed')
+  assert(closed.length > 0, '仿真内应有已关闭告警')
+  const realNow = Date.now
+  Date.now = () => realNow() + 2 * 3_600_000
+  try {
+    for (let i = 0; i < 4; i++) step(250)
+    const after = catchUp(0, 0)
+    for (const e of closed) assert(!after.events.some((x) => x.id === e.id), `已淘汰的告警 ${e.id} 不应再补发`)
+    const oldest = Math.min(...after.events.map((e) => e.id))
+    assert.equal(after.truncated, oldest > 1)
+    if (!all.events.some((e) => e.id === 1 && e.status !== 'closed')) assert.equal(after.truncated, true)
+  } finally {
+    Date.now = realNow
+  }
 })
 
 test('目标端口被占用时引擎非零退出，不留下无监听的仿真进程', async () => {
