@@ -14,11 +14,21 @@ import Hud from './components/Hud.vue'
 import { startDataFeed, stopDataFeed } from './services/socket'
 import { useDashboardStore } from './stores/dashboard'
 import FeedNotice from './components/FeedNotice.vue'
+import { usePerformance } from './services/usePerformance'
+import { useDisplayRuntime } from './services/useDisplayRuntime'
 
 const store = useDashboardStore()
+usePerformance()
+useDisplayRuntime()
+const fit = new URLSearchParams(location.search).get('fit') || 'fill'
+const seamValues = (new URLSearchParams(location.search).get('seams') || '').split(',').map(Number).filter(n => n > 0 && n < 100).sort((a,b) => a-b)
+// 两条拼缝将三屏分成三个独立安全区；不以遮罩盖住文字。
+const seamLayout = seamValues.length === 2 && seamValues[0]! >= 20 && seamValues[1]! <= 80 && seamValues[1]! - seamValues[0]! >= 20
+  ? { '--seam-left': `calc(${seamValues[0]}vw - 28px)`, '--seam-center': `calc(${seamValues[1]! - seamValues[0]!}vw - 24px)`, '--seam-right': `calc(${100-seamValues[1]!}vw - 28px)` }
+  : undefined
 let freshnessTimer: number | undefined
 function onKey(e: KeyboardEvent) {
-  if (e.key === 'Escape') store.selectHub(null)
+  if (e.key === 'Escape') store.escape()
   if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return
   const target = e.target as HTMLElement | null
   if (target?.isContentEditable || target?.closest('input, textarea, select')) return
@@ -46,8 +56,8 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="viewport">
-    <div class="screen" :class="{ 'motion-off': !store.decorationsOn }">
+  <div class="viewport" :class="[{ kiosk: store.kioskOn, 'cursor-hidden': store.cursorHidden }, `fit-${fit}`]">
+    <div class="screen" :class="{ 'motion-off': !store.decorationsOn, 'seam-safe': seamLayout }" :style="seamLayout">
       <div class="heading">
         <TopBar />
         <FeedNotice />
@@ -72,6 +82,7 @@ onBeforeUnmount(() => {
         <RouteRank />
       </footer>
     </div>
+    <div v-if="store.notice && store.checkedAt - store.noticeAt < 5000" class="toast" role="status">{{ store.notice }}</div>
   </div>
 </template>
 
@@ -102,6 +113,15 @@ button, [role='button'] { min-height: var(--control-size); }
 button { min-width: var(--control-size); }
 .interactive-row:hover { background: var(--color-hover); }
 .interactive-row.selected { background: var(--color-selected); box-shadow: inset 2px 0 var(--color-accent); }
+button:focus-visible, [role='button']:focus-visible {
+  background: var(--color-infoBg);
+  color: var(--color-heading);
+  outline-offset: -3px;
+  box-shadow: inset 0 0 0 2px var(--color-panel);
+  border-radius: var(--radius-control);
+  position: relative;
+  z-index: 2;
+}
 .motion-off *, .motion-off *::before, .motion-off *::after { animation: none !important; transition: none !important; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
@@ -110,10 +130,17 @@ button { min-width: var(--control-size); }
 
 <style scoped>
 .viewport {
+  min-height: 100vh;
   min-height: 100dvh;
 }
+.kiosk { user-select: none; }
+.cursor-hidden, .cursor-hidden :deep(*) { cursor: none !important; }
+.toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); max-width: calc(100vw - 32px); padding: 12px 20px; background: var(--color-panel); border: 1px solid var(--color-accent); border-radius: 8px; z-index: 200; }
+.fit-contain .screen { max-width: 1920px; margin-inline: auto; }
+.fit-width .screen { height: auto; }
 .screen {
   width: 100%;
+  height: 100vh;
   height: 100dvh;
   min-height: 1016px;
   background: var(--color-canvas);
@@ -157,10 +184,28 @@ button { min-width: var(--control-size); }
   .middle > :deep(.map-wrap) { grid-column: 1 / -1; grid-row: 1; min-height: 520px; }
   .col { min-height: 600px; }
 }
+@media (max-aspect-ratio: 3/2) and (min-width: 1280px) {
+  .screen { height: auto; min-height: 100vh; grid-template-rows: auto auto 176px; }
+  .middle { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .middle > :deep(.map-wrap) { grid-column: 1 / -1; grid-row: 1; min-height: 600px; }
+  .col { min-height: 720px; }
+}
 @media (max-width: 767px) {
   .screen { padding: var(--space-2); gap: var(--space-2); grid-template-rows: auto auto auto; }
   .middle { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
   .middle > :deep(.map-wrap) { min-height: 440px; }
   .bottom { min-height: 320px; }
+}
+@media (min-aspect-ratio: 5/2) and (min-width: 2000px) {
+  .middle { grid-template-columns: minmax(560px, 1fr) minmax(700px, 2fr) minmax(640px, 1fr); }
+  .left, .right { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); }
+  .left > :first-child, .right > :first-child { grid-column: 1 / -1; }
+}
+@media (min-width: 2000px) {
+  .seam-safe .middle { grid-template-columns: var(--seam-left) var(--seam-center) var(--seam-right); gap: 24px; }
+  .seam-safe :deep(.topbar) { display: grid; grid-template-columns: var(--seam-left) var(--seam-center) var(--seam-right); gap: 24px; padding-inline: 0; }
+  .seam-safe :deep(.brand), .seam-safe :deep(.meta) { min-width: 0; }
+  .seam-safe :deep(.kpis) { flex-wrap: wrap; justify-content: center; }
+  .seam-safe .bottom { margin-left: calc(var(--seam-left) + 24px); margin-right: calc(var(--seam-right) + 24px); }
 }
 </style>

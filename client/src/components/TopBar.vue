@@ -2,6 +2,7 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useDashboardStore } from '../stores/dashboard'
 import { useMediaQuery } from '../services/useMediaQuery'
+import DisplayControls from './DisplayControls.vue'
 
 const store = useDashboardStore()
 const reducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)')
@@ -30,25 +31,25 @@ function fmt(n: number) {
       <div class="logo">运</div>
       <div class="titles">
         <h1>智慧物流数据可视化监控平台</h1>
-        <p>全国干线网实时运行总览</p>
+        <p>全国干线网实时运行总览 · 全国指标口径</p>
       </div>
     </div>
 
     <div class="kpis">
       <div class="kpi">
-        <span class="kpi-label">在途车辆</span>
+        <span class="kpi-label">全国在途车辆</span>
         <span class="kpi-value">{{ fmt(store.kpi.enRoute) }}<small>台</small></span>
       </div>
       <div class="kpi">
-        <span class="kpi-label">今日运单</span>
+        <span class="kpi-label">全国今日运单</span>
         <span class="kpi-value">{{ fmt(store.kpi.ordersToday) }}<small>单</small></span>
       </div>
       <div class="kpi">
-        <span class="kpi-label">准时率</span>
+        <span class="kpi-label">全国准时率</span>
         <span class="kpi-value">{{ store.hasData ? store.kpi.onTimeRate.toFixed(1) : '—' }}<small>%</small></span>
       </div>
       <div class="kpi alert">
-        <span class="kpi-label">待处理异常</span>
+        <span class="kpi-label">全国待处理异常</span>
         <span class="kpi-value">{{ fmt(store.kpi.pendingAnomalies) }}<small>起</small></span>
       </div>
     </div>
@@ -65,6 +66,7 @@ function fmt(n: number) {
         <span class="sim">自研引擎 · 仿真数据</span>
       </div>
       <div class="tools">
+        <DisplayControls />
         <span class="updated">{{ store.dataAt ? `更新 ${new Date(store.dataAt).toLocaleTimeString('zh-CN', { hour12: false, timeZone: 'Asia/Shanghai' })}` : '等待首包数据' }}</span>
         <button class="hud-btn" :aria-pressed="store.hudOn" :class="{ on: store.hudOn }" @click="store.toggleHud()">性能 HUD</button>
         <button class="hud-btn" :aria-pressed="store.decorationsOn && !reducedMotion" :disabled="reducedMotion"

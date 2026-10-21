@@ -19,6 +19,7 @@ export default defineConfig({
     },
   },
   build: {
+    target: 'chrome87',
     chunkSizeWarningLimit: 2500,
   },
 })
