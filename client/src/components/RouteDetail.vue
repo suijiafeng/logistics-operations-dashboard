@@ -62,7 +62,7 @@ const metrics = computed(() => {
   <section v-if="ends && store.hasData" class="route-detail" :class="store.detailSide" aria-label="干线详情">
     <header>
       <div class="titles">
-        <h4 :title="`${ends.from.name} → ${ends.to.name}`">{{ ends.from.name }} → {{ ends.to.name }}</h4>
+        <h4 :title="`${ends.from.name} ↔ ${ends.to.name}`">{{ ends.from.name }} ↔ {{ ends.to.name }}</h4>
         <p>干线 · 地图只突出线上车辆{{ fleet ? ` · 装卸中 ${fleet[1]} 台` : '' }}</p>
       </div>
       <button class="close" aria-label="关闭干线详情（Esc）" @click="store.selectRoute(null)">×</button>
@@ -72,7 +72,7 @@ const metrics = computed(() => {
       <button class="hub" :title="`${ends.from.name} · ${ends.from.site} · 点击查看网点`" @click="focusHub(ends.from.id)">
         <b>{{ ends.from.name }}</b><span>{{ ends.from.site }}</span>
       </button>
-      <span class="arrow" aria-hidden="true">→</span>
+      <span class="arrow" aria-hidden="true">↔</span>
       <button class="hub" :title="`${ends.to.name} · ${ends.to.site} · 点击查看网点`" @click="focusHub(ends.to.id)">
         <b>{{ ends.to.name }}</b><span>{{ ends.to.site }}</span>
       </button>

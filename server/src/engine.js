@@ -58,6 +58,8 @@ for (let i = 0; i < VEHICLE_COUNT; i++) {
     speedKmh: randSpeed(),
     status: dwelling ? STATUS.DWELL : STATUS.EN_ROUTE,
     dwellUntil: dwelling ? Math.floor(rand(4, 20)) * 4 : 0,
+    // 装卸所在网点：离站时才记该网点发车
+    dwellHub: dwelling ? (dir === 1 ? ROUTES[routeIdx][0] : ROUTES[routeIdx][1]) : null,
     anomalyUntil: 0,
     alertId: 0,
   })
@@ -88,7 +90,6 @@ const ALERT_RETAIN_MS = 60 * 60_000
 const state = {
   tick: 0,
   onTimeRate: 97.8,
-  pendingAnomalies: 0,
   events: [], // 待推送的异常事件
   history: [],
   eventSeq: 0,
@@ -183,6 +184,8 @@ function sweepAlerts(now) {
     if (alert.status !== 'closed' && alert.recoveredAt && now - alert.recoveredAt > AUTO_CLOSE_MS) closeAlert(alert, '系统 · 恢复后超时未处置', now)
     if (alert.status === 'closed' && now - alert.closedAt > ALERT_RETAIN_MS) state.alerts.delete(alert.id)
   }
+  // 事件列表只保留仍在告警表里的记录：已关闭超过保留期的按绝对时间淘汰，不随日切清空
+  if (state.history.some((e) => !state.alerts.has(e.id))) state.history = state.history.filter((e) => state.alerts.has(e.id))
 }
 
 /** 告警统计：按状态、级别计数，今日关闭数与人工处置平均时长（分钟） */
@@ -227,12 +230,10 @@ export function vehicleDetail(plate) {
 
 export function step(dtMs) {
   const nextMetrics = readMetrics()
+  // 日切只重置「按日累计」：网点到发车、今日关闭、车队当日计数；活动告警与事件历史保留到恢复 / 按保留期淘汰，
+  // 否则刷新后的页面会看到异常车辆却取不到对应告警，与持续在线的页面不一致
   if (nextMetrics.day !== metrics.day) {
     for (const hub of Object.values(hubStats)) { hub.arrivals = 0; hub.departures = 0 }
-    state.events = []
-    state.history = []
-    state.alerts.clear()
-    state.alertChanges.clear()
     state.closedToday = []
     resetFleetDaily(vehicles)
   }
@@ -248,21 +249,21 @@ export function step(dtMs) {
     stepColdChain(vehicles, 1, now, hooks)
     stepSafety(vehicles, 1, now, hooks)
   }
-  let activeAnomalies = 0
   for (const v of vehicles) {
     const now = state.tick
     if (v.status === STATUS.DWELL) {
       if (now >= v.dwellUntil) {
         v.status = STATUS.EN_ROUTE
         v.km = v.dir === 1 ? 0 : routeKm(v.routeIdx)
+        // 装卸结束实际离站，此时才记发车
+        if (v.dwellHub) hubStats[v.dwellHub].departures++
+        v.dwellHub = null
       }
       continue
     }
     if (v.status === STATUS.ANOMALY) {
-      activeAnomalies++
       if (now >= v.anomalyUntil) {
         v.status = STATUS.EN_ROUTE
-        state.pendingAnomalies = Math.max(0, state.pendingAnomalies - 1)
         recoverAlert(v, Date.now())
       }
       continue
@@ -273,7 +274,6 @@ export function step(dtMs) {
     if (Math.random() < (0.004 / 60) * dt) {
       v.status = STATUS.ANOMALY
       v.anomalyUntil = now + Math.floor(rand(20, 90)) * 4 // tick=250ms → 20–90 秒
-      state.pendingAnomalies++
       pushEvent(v)
       continue
     }
@@ -297,16 +297,16 @@ export function step(dtMs) {
         v.km = routeKm(newRoute)
       }
       v.speedKmh = randSpeed()
-      // 每台到车最终都会换线发出，发车计数与到车保持大体平衡
-      hubStats[arrivedHub].departures++
-      // 30% 概率在站内装卸停留 4–20 秒
+      // 30% 概率在站内装卸停留 4–20 秒：发车留到实际离站再记；其余立即换线发出，当次记发车
       if (Math.random() < 0.3) {
         v.status = STATUS.DWELL
         v.dwellUntil = now + Math.floor(rand(4, 20)) * 4
+        v.dwellHub = arrivedHub
+      } else {
+        hs.departures++
       }
     }
   }
-  state.pendingAnomalies = Math.max(state.pendingAnomalies, activeAnomalies)
   // 准时率与仓配利用率缓慢游走
   if (state.tick % 4 === 0) {
     sweepAlerts(Date.now())
@@ -400,7 +400,8 @@ function shipmentPayload() {
 function routeVolumes() {
   return ROUTES.map(([a, b], index) => ({
     id: `${a}-${b}`, fromId: a, toId: b,
-    name: `${hubById[a].name} → ${hubById[b].name}`,
+    // 累计只有线路维度、没有方向维度，名称用 ↔ 表示双向合计，不能当成 A→B 单向运量
+    name: `${hubById[a].name} ↔ ${hubById[b].name}`,
     value: metrics.routes[index],
   }))
     .sort((x, y) => y.value - x.value || x.id.localeCompare(y.id))

@@ -1,5 +1,6 @@
 import { useDashboardStore, ALERT_STATUS, type AlertStatus, type DeltaMsg, type SnapshotMsg } from '../stores/dashboard'
 import { ROUTES } from '../data/network'
+import { statusOf, routeOf, kindOf } from './vehicles'
 
 // 数据链路：先 HTTP 拉全量快照（12,000 台车辆位置 + 全部统计），再连 WebSocket 收 1 秒聚合的增量包
 let ws: WebSocket | null = null
@@ -27,8 +28,27 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function hasKpi(value: unknown) {
   if (!isRecord(value)) return false
   return ['enRoute', 'ordersToday', 'onTimeRate', 'pendingAnomalies'].every(
-    (key) => typeof value[key] === 'number' && Number.isFinite(value[key]),
+    (key) => typeof value[key] === 'number' && Number.isFinite(value[key]) && (value[key] as number) >= 0,
   )
+}
+
+// 时间戳必须是 Date 能表示的毫秒值（1e300 虽是有限数，Intl 格式化会抛 RangeError）
+const MAX_DATE_MS = 8.64e15
+const validTs = (ts: unknown) => typeof ts === 'number' && Number.isFinite(ts) && ts > 0 && ts <= MAX_DATE_MS
+
+// 协议每包都是全量位置表：长度必须正好等于车辆数 × 3，坐标在经纬度范围内，编码位的类型 / 状态 / 线路下标都在枚举内。
+// 空表、数量不符、状态 99、越界坐标都整包拒收，保留最后一次有效数据
+function validVehicles(arr: unknown, count: number): arr is number[] {
+  if (!Array.isArray(arr) || count <= 0 || arr.length !== count * 3) return false
+  for (let i = 0; i < arr.length; i += 3) {
+    const lng = arr[i], lat = arr[i + 1], code = arr[i + 2]
+    if (!finite(lng) || !finite(lat) || !finite(code)) return false
+    if (lng < -180 || lng > 180 || lat < -90 || lat > 90) return false
+    if (!Number.isInteger(code) || code < 0) return false
+    const status = statusOf(code), kind = kindOf(code)
+    if (status > 2 || kind > 1 || routeOf(code) >= ROUTES.length) return false
+  }
+  return true
 }
 
 const finite = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n)
@@ -94,15 +114,13 @@ function isSnapshotMsg(value: unknown): value is SnapshotMsg {
   if (
     typeof value.vehicleCount !== 'number' ||
     !Number.isInteger(value.vehicleCount) ||
-    value.vehicleCount < 0
+    value.vehicleCount <= 0
   ) {
     return false
   }
   return (
-    typeof value.ts === 'number' && Number.isFinite(value.ts) && validStats(value, true) &&
-    Array.isArray(value.vehicles) &&
-    value.vehicles.length === value.vehicleCount * 3 &&
-    value.vehicles.every((item) => typeof item === 'number' && Number.isFinite(item)) &&
+    validTs(value.ts) && validStats(value, true) &&
+    validVehicles(value.vehicles, value.vehicleCount) &&
     Array.isArray(value.hubs) &&
     hasKpi(value.kpi) &&
     Array.isArray(value.trend) &&
@@ -112,13 +130,12 @@ function isSnapshotMsg(value: unknown): value is SnapshotMsg {
   )
 }
 
-function isDeltaMsg(value: unknown): value is DeltaMsg {
+/** 增量包不带车辆数，按快照建立的车辆数校验：少一台都当坏包 */
+function isDeltaMsg(value: unknown, vehicleCount: number): value is DeltaMsg {
   if (!isRecord(value) || value.type !== 'delta') return false
   return (
-    typeof value.ts === 'number' && Number.isFinite(value.ts) && validStats(value, false) &&
-    Array.isArray(value.vehicles) &&
-    value.vehicles.length % 3 === 0 &&
-    value.vehicles.every((item) => typeof item === 'number' && Number.isFinite(item)) &&
+    validTs(value.ts) && validStats(value, false) &&
+    validVehicles(value.vehicles, vehicleCount) &&
     Array.isArray(value.hubs) &&
     hasKpi(value.kpi) &&
     Array.isArray(value.trend) &&
@@ -162,7 +179,7 @@ function connectWs() {
     if (stopped || session !== generation) return
     try {
       const msg: unknown = JSON.parse(ev.data as string)
-      if (isDeltaMsg(msg)) {
+      if (isDeltaMsg(msg, store.vehicleCount)) {
         store.applyDelta(msg, (ev.data as string).length / 1024)
       } else if (isRecord(msg) && msg.type === 'delta') {
         throw new Error('增量数据格式不正确')
