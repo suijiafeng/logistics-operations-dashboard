@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as echarts from 'echarts'
 import { useEcharts, ACCENT, RED, TOOLTIP, TEXT } from '../services/useEcharts'
 import { COLORS, FONT } from '../design/tokens'
@@ -32,6 +32,7 @@ let fedCount = 0 // 首屏分片渐进：已喂入的车辆数
 
 const STATUS_COLORS = [COLORS.vehicle, COLORS.bar, RED] // 在途 / 装卸 / 异常
 const STATUS_SIZES = [4, 4, 6]
+const DRAWER_SPAN = 300 + 16 * 2 + 8
 
 function inView(lng: number, lat: number) {
   if (store.view === 'china') return true
@@ -116,6 +117,22 @@ function hubData() {
   })
 }
 
+// 网点抽屉打开时，地图收进抽屉左侧的剩余区域，任何网点都不会被抽屉遮挡
+function geoLayout() {
+  const c = chart.value
+  const open = !!store.selectedHub && store.hasData
+  if (!c || !open) return { layoutCenter: ['50%', '50%'], layoutSize: '96%' }
+  const w = c.getWidth(), h = c.getHeight()
+  const free = Math.max(w * 0.4, w - DRAWER_SPAN)
+  return { layoutCenter: [free / 2, h / 2], layoutSize: Math.min(free, h) * 0.96 }
+}
+
+// 只有选中的网点保留涟漪：动效只留给焦点，避免满屏网点同时闪动
+function focusData() {
+  const hub = store.selectedHub
+  return motion.value && hub && inView(hub.lng, hub.lat) ? [{ name: hub.name, value: [hub.lng, hub.lat] }] : []
+}
+
 function hitData() {
   return coarse.value ? visibleHubs().map((hub) => ({ name: hub.name, hubId: hub.id, value: [hub.lng, hub.lat] })) : []
 }
@@ -155,17 +172,15 @@ function updateSelection() {
   const c = chart.value
   if (!c) return
   c.dispatchAction({ type: 'hideTip' })
-  c.setOption({ series: [
+  c.setOption({ geo: geoLayout(), series: [
     { id: 'hubs', data: hubData() },
+    { id: 'hub-focus', data: focusData() },
     { id: 'hub-hit', data: hitData() },
     { id: 'event-route', data: eventRouteData() },
     { id: 'event-position', data: eventPositionData() },
   ] })
-  const hub = store.selectedHub
-  if (hub) {
-    const pixel = c.convertToPixel({ geoIndex: 0 }, [hub.lng, hub.lat]) as number[] | undefined
-    if (pixel) store.detailSide = pixel[0] > c.getWidth() / 2 ? 'left' : 'right'
-  }
+  // 地图已让出右侧空间，抽屉固定在右侧
+  store.detailSide = 'right'
 }
 
 function baseOption() {
@@ -185,8 +200,7 @@ function baseOption() {
     geo: {
       map: store.view,
       roam: false,
-      layoutCenter: ['50%', '50%'],
-      layoutSize: '96%',
+      ...geoLayout(),
       itemStyle: { areaColor: COLORS.mapArea, borderColor: COLORS.mapBorder, borderWidth: 0.8 },
       emphasis: { disabled: true, label: { show: false } },
       select: { disabled: true },
@@ -222,11 +236,23 @@ function baseOption() {
         silent: true,
       })),
       {
-        id: 'hubs',
-        type: motion.value ? 'effectScatter' : 'scatter',
+        id: 'hub-focus',
+        type: 'effectScatter',
         coordinateSystem: 'geo',
         zlevel: 3,
-        rippleEffect: { brushType: 'stroke', scale: 2.6 },
+        z: 1,
+        silent: true,
+        symbolSize: 18,
+        rippleEffect: { brushType: 'stroke', scale: 2.6, color: ACCENT },
+        itemStyle: { color: 'rgba(255, 138, 61, 0.25)' },
+        data: focusData(),
+      },
+      {
+        id: 'hubs',
+        type: 'scatter',
+        coordinateSystem: 'geo',
+        zlevel: 3,
+        z: 2,
         symbolSize: (val: unknown, params: { data?: { level?: number } }) =>
           params.data?.level === 1 ? 13 : params.data?.level === 2 ? 10 : 8,
         itemStyle: { color: COLORS.secondary },
@@ -318,7 +344,20 @@ watch(chart, (c) => {
   })
 }, { flush: 'post' })
 
+// 容器尺寸变化时按新尺寸重算抽屉打开状态下的地图布局（像素坐标不会随 resize 自动更新）
+let layoutObserver: ResizeObserver | undefined
+let layoutRaf = 0
+onMounted(() => {
+  layoutObserver = new ResizeObserver(() => {
+    cancelAnimationFrame(layoutRaf)
+    layoutRaf = requestAnimationFrame(() => { if (store.selectedHub) chart.value?.setOption({ geo: geoLayout() }) })
+  })
+  if (el.value) layoutObserver.observe(el.value)
+})
+
 onBeforeUnmount(() => {
+  layoutObserver?.disconnect()
+  cancelAnimationFrame(layoutRaf)
   disposed = true
   buildVersion++
   cancelAnimationFrame(rafId)
