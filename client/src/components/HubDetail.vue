@@ -68,9 +68,8 @@ function jump(id: string) {
       <p class="note">统计进出该网点的关联运单，跨网点不可相加。</p>
     </section>
 
-    <section class="block">
+    <section v-if="relatedEvents.length" class="block">
       <h5>相关告警 · {{ relatedEvents.length }}</h5>
-      <p v-if="!relatedEvents.length" class="note">最近接收记录暂无本网点事件。</p>
       <button v-for="event in relatedEvents" :key="event.id" class="event-link" :title="`${event.type} · ${event.place} · ${event.desc}`" @click="store.locateEvent(event)">
         <i class="sev" :class="LEVEL_DOT[event.level] ?? 'lv0'" />
         <span class="ev-main"><b>{{ event.type }}</b><span>{{ event.place }}</span></span>

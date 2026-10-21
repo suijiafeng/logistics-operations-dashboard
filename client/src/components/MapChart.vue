@@ -12,9 +12,35 @@ import chinaGeo from '../assets/geo/china.json'
 
 const store = useDashboardStore()
 const { el, chart } = useEcharts()
+// 南海诸岛小图：独立实例，容器裁掉框外部分，只显示南海范围
+const { el: insetEl, chart: insetChart } = useEcharts()
 const motion = useChartMotion()
 const coarse = useMediaQuery('(pointer: coarse)')
 echarts.registerMap('china', chinaGeo as never)
+
+type Geo = { features: { properties: { name?: string; adcode?: string | number }; geometry: { type: string; coordinates: number[][][][] } }[] }
+// 主图只保留大陆与海南本岛：九段线和南海诸岛（北纬 18° 以南）让纬度跨度从约 50° 增加到 35°，
+// 会把全国图压小；它们改由右下角的南海诸岛小图展示
+const SCS_LAT = 18
+function maxLat(poly: number[][][]) { let m = -90; for (const ring of poly) for (const p of ring) m = Math.max(m, p[1]); return m }
+const chinaMain = {
+  ...(chinaGeo as unknown as Geo),
+  features: (chinaGeo as unknown as Geo).features
+    .filter((f) => !String(f.properties.adcode).includes('JD'))
+    .map((f) => f.properties.name !== '海南省' || f.geometry.type !== 'MultiPolygon' ? f
+      : { ...f, geometry: { ...f.geometry, coordinates: f.geometry.coordinates.filter((poly) => maxLat(poly) >= SCS_LAT) } }),
+}
+echarts.registerMap('china-main', chinaMain as never)
+// ECharts geo 宽高比 = 经度跨度 / 纬度跨度 × aspectScale(0.75)，用于按面板尺寸计算铺满时的 layoutSize
+function geoAspect(geo: Geo) {
+  let x0 = 180, x1 = -180, y0 = 90, y1 = -90
+  for (const f of geo.features) for (const poly of f.geometry.type === 'Polygon' ? [f.geometry.coordinates as unknown as number[][][]] : f.geometry.coordinates)
+    for (const ring of poly) for (const [x, y] of ring) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y) }
+  return ((x1 - x0) / (y1 - y0)) * 0.75
+}
+const ASPECT: Record<string, number> = { china: geoAspect(chinaMain) }
+// 珠三角 7 个网点在全国视图里挤在一起：名字收进一个聚合标签，点击下钻广东
+const PRD = new Set(['gz', 'sz', 'dg', 'fs', 'zh', 'zs', 'hz'])
 
 let gdRegistered = false
 let containsGuangdong: ((lng: number, lat: number) => boolean) | undefined
@@ -107,7 +133,7 @@ function hubData() {
       symbolSize: selected ? 18 : h.level === 1 ? 13 : h.level === 2 ? 10 : 8,
       itemStyle: { color: selected ? ACCENT : COLORS.secondary, borderColor: selected ? COLORS.accentValue : COLORS.canvas, borderWidth: selected ? 2 : 1 },
       label: {
-        show: store.view === 'guangdong' || h.level === 1 || selected,
+        show: store.view === 'guangdong' || selected || (h.level === 1 && !PRD.has(h.id)),
         position: h.id === 'fs' || h.id === 'zh' ? 'left' : h.id === 'dg' || h.id === 'gz' ? 'top' : 'right',
         offset: h.id === 'fs' ? [-8, 12] : h.id === 'gz' ? [-8, -16] : h.id === 'dg' ? [16, -8] : [0, 0],
         color: selected ? COLORS.heading : h.level === 1 ? COLORS.text : COLORS.secondary,
@@ -118,13 +144,22 @@ function hubData() {
 }
 
 // 网点抽屉打开时，地图收进抽屉左侧的剩余区域，任何网点都不会被抽屉遮挡
+// 按面板宽高比铺满（避开左上面包屑）；网点抽屉打开时只占抽屉左侧的剩余区域
 function geoLayout() {
   const c = chart.value
-  const open = !!store.selectedHub && store.hasData
-  if (!c || !open) return { layoutCenter: ['50%', '50%'], layoutSize: '96%' }
+  if (!c) return { layoutCenter: ['50%', '50%'], layoutSize: '96%' }
   const w = c.getWidth(), h = c.getHeight()
-  const free = Math.max(w * 0.4, w - DRAWER_SPAN)
-  return { layoutCenter: [free / 2, h / 2], layoutSize: Math.min(free, h) * 0.96 }
+  const open = !!store.selectedHub && store.hasData
+  const free = open ? Math.max(w * 0.4, w - DRAWER_SPAN) : w
+  const top = 44
+  const bw = free * 0.94, bh = (h - top) * 0.94
+  const aspect = ASPECT[store.view] ?? 1.3
+  const size = aspect > 1 ? Math.min(bw, bh * aspect) : Math.min(bh, bw / aspect)
+  return { layoutCenter: [free / 2, top + (h - top) / 2], layoutSize: size }
+}
+
+function clusterData() {
+  return store.view === 'china' ? [{ name: '珠三角', value: [hubById.gz.lng, hubById.gz.lat] }] : []
 }
 
 // 只有选中的网点保留涟漪：动效只留给焦点，避免满屏网点同时闪动
@@ -176,6 +211,7 @@ function updateSelection() {
     { id: 'hubs', data: hubData() },
     { id: 'hub-focus', data: focusData() },
     { id: 'hub-hit', data: hitData() },
+    { id: 'prd-cluster', data: clusterData() },
     { id: 'event-route', data: eventRouteData() },
     { id: 'event-position', data: eventPositionData() },
   ] })
@@ -198,7 +234,7 @@ function baseOption() {
       hideDelay: 0,
     },
     geo: {
-      map: store.view,
+      map: store.view === 'china' ? 'china-main' : store.view,
       roam: false,
       ...geoLayout(),
       itemStyle: { areaColor: COLORS.mapArea, borderColor: COLORS.mapBorder, borderWidth: 0.8 },
@@ -271,6 +307,19 @@ function baseOption() {
         data: hubData(),
       },
       {
+        id: 'prd-cluster', type: 'scatter', coordinateSystem: 'geo', zlevel: 4,
+        symbolSize: 1, itemStyle: { color: 'transparent' },
+        label: {
+          show: true, position: 'right', offset: [8, 22],
+          formatter: '{a|珠三角}{b|  7 个网点}',
+          backgroundColor: COLORS.overlay, borderColor: COLORS.border, borderWidth: 1, borderRadius: 10, padding: [3, 8],
+          rich: { a: { color: COLORS.heading, fontSize: FONT.small, fontWeight: 500 }, b: { color: COLORS.tertiary, fontSize: 11 } },
+        },
+        emphasis: { disabled: true },
+        tooltip: { formatter: '珠三角 7 个网点 · 点击下钻广东' },
+        data: clusterData(),
+      },
+      {
         id: 'hub-hit', type: 'scatter', coordinateSystem: 'geo', zlevel: 4,
         symbolSize: 44, itemStyle: { color: 'rgba(255,138,61,0.001)' },
         emphasis: { disabled: true }, tooltip: { formatter: hubTooltip },
@@ -295,6 +344,7 @@ async function ensureGuangdong() {
   if (gdRegistered) return
   const gd = await import('../data/guangdong')
   echarts.registerMap('guangdong', gd.default as never)
+  ASPECT.guangdong = geoAspect(gd.default as unknown as Geo)
   containsGuangdong = gd.inGuangdong
   gdRegistered = true
 }
@@ -329,7 +379,10 @@ watch(chart, (c) => {
   void rebuildMap()
   c.on('click', (params) => {
     c.dispatchAction({ type: 'hideTip' })
-    if (params.seriesId === 'hubs' || params.seriesId === 'hub-hit') {
+    if (params.seriesId === 'prd-cluster') {
+      store.clearSelection()
+      store.setView('guangdong')
+    } else if (params.seriesId === 'hubs' || params.seriesId === 'hub-hit') {
       const hubId = (params.data as { hubId?: string })?.hubId
       if (hubId) store.selectHub(hubId)
     } else if (params.componentType === 'geo' && params.name === '广东省' && store.view === 'china') {
@@ -344,13 +397,25 @@ watch(chart, (c) => {
   })
 }, { flush: 'post' })
 
+watch(insetChart, (c) => {
+  c?.setOption({
+    animation: false,
+    geo: {
+      map: 'china', roam: false, silent: true,
+      boundingCoords: [[105.5, 24.5], [121.5, 3]],
+      itemStyle: { areaColor: COLORS.mapArea, borderColor: COLORS.barStrong, borderWidth: 0.8 },
+      emphasis: { disabled: true }, select: { disabled: true }, label: { show: false }, tooltip: { show: false },
+    },
+  })
+}, { flush: 'post' })
+
 // 容器尺寸变化时按新尺寸重算抽屉打开状态下的地图布局（像素坐标不会随 resize 自动更新）
 let layoutObserver: ResizeObserver | undefined
 let layoutRaf = 0
 onMounted(() => {
   layoutObserver = new ResizeObserver(() => {
     cancelAnimationFrame(layoutRaf)
-    layoutRaf = requestAnimationFrame(() => { if (store.selectedHub) chart.value?.setOption({ geo: geoLayout() }) })
+    layoutRaf = requestAnimationFrame(() => chart.value?.setOption({ geo: geoLayout() }))
   })
   if (el.value) layoutObserver.observe(el.value)
 })
@@ -402,6 +467,10 @@ watch(
     </nav>
     <p v-if="!store.hasData" class="map-loading">{{ store.dataStatus === 'error' ? '车辆数据暂不可用' : '正在加载车辆数据…' }}</p>
     <p v-if="mapError" class="map-error" role="alert">{{ mapError }}</p>
+    <figure v-show="store.view === 'china'" class="scs-inset" :class="{ shifted: !!store.selectedHub && store.hasData }" aria-label="南海诸岛示意">
+      <div ref="insetEl" class="scs-chart" />
+      <figcaption>南海诸岛</figcaption>
+    </figure>
     <div v-if="store.hasData" class="map-legend">
       <p class="legend-title">车辆状态 · {{ store.view === 'guangdong' ? '广东省内' : '共' }} {{ fmtInt(statusCounts[0] + statusCounts[1] + statusCounts[2]) }} 台</p>
       <dl>
@@ -460,6 +529,23 @@ watch(
 .crumb-link:hover { color: var(--color-heading); }
 .map-loading { position: absolute; top: 52px; left: var(--space-4); padding: var(--space-2); color: var(--color-secondary); background: var(--color-panel); }
 .map-error { position: absolute; top: 52px; left: var(--space-4); color: var(--color-dangerText); font-size: var(--font-body); }
+.scs-inset {
+  position: absolute;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  width: 96px;
+  height: 128px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: rgba(8, 19, 42, 0.6);
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 2;
+}
+/* 网点抽屉固定在右侧时，小图移到抽屉左侧 */
+.scs-inset.shifted { right: calc(300px + var(--space-4) * 2 + 8px); }
+.scs-chart { position: absolute; inset: 0; }
+.scs-inset figcaption { position: absolute; right: 6px; bottom: 4px; font-size: 11px; color: var(--color-tertiary); }
 .map-legend {
   position: absolute;
   left: var(--space-4);

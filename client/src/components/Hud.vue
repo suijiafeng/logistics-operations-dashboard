@@ -27,7 +27,7 @@ const store = useDashboardStore()
   position: absolute;
   /* 悬浮在中央地图右下角，不遮挡左右数据列 */
   right: var(--space-4);
-  bottom: 52px;
+  bottom: 160px;
   width: 196px;
   background: var(--color-hud);
   border-radius: var(--radius-panel);
