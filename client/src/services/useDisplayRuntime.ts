@@ -11,7 +11,11 @@ export function useDisplayRuntime() {
   let tourStep = 0
   let wake: WakeHandle | null = null
   let acquiring = false
-  let refreshedDay = ''
+  // 定时刷新去重：记录「日期 目标时刻」并写入 sessionStorage，刷新后的新页面在同一分钟内不会再次触发；
+  // 存储不可用时只靠内存，最多多刷新一次，不抛错
+  const REFRESH_KEY = 'logistics-refreshed-at'
+  let refreshedAt = ''
+  try { refreshedAt = sessionStorage.getItem(REFRESH_KEY) ?? '' } catch { refreshedAt = '' }
   const params = new URLSearchParams(location.search)
   const refresh = params.get('refresh')
   async function acquireWake() {
@@ -71,8 +75,11 @@ export function useDisplayRuntime() {
       }
       const date = new Date(), day = date.toLocaleDateString('en-CA')
       const time = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
-      if (store.kioskOn && refresh && /^\d{2}:\d{2}$/.test(refresh) && time === refresh && day !== refreshedDay && idle > 30_000 && store.dataStatus === 'ready') {
-        refreshedDay = day; location.reload()
+      const stamp = `${day} ${time}`
+      if (store.kioskOn && refresh && /^\d{2}:\d{2}$/.test(refresh) && time === refresh && stamp !== refreshedAt && idle > 30_000 && store.dataStatus === 'ready') {
+        refreshedAt = stamp
+        try { sessionStorage.setItem(REFRESH_KEY, stamp) } catch { /* 存储不可用时退回内存去重 */ }
+        location.reload()
       }
     }, 1000)
     void acquireWake()

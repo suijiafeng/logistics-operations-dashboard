@@ -110,6 +110,19 @@ export interface SnapshotMsg {
   shipments?: ShipmentStats
   cold?: ColdStats
   safety?: SafetyStats
+  /** 引擎事件游标：订阅时带回，补收快照之后广播掉的事件 */
+  eventSeq?: number
+}
+
+/** 订阅补收：快照（或被跳过的增量）之后到订阅之间的新事件与告警状态变更 */
+export interface CatchupMsg {
+  engineId?: string
+  type: 'catchup'
+  ts: number
+  events: AnomalyEvent[]
+  alertUpdates: AnomalyEvent[]
+  /** 游标之前还有已被引擎淘汰的事件，历史不完整 */
+  truncated: boolean
 }
 
 export interface DeltaMsg {
@@ -173,6 +186,9 @@ export const useDashboardStore = defineStore('dashboard', {
     /** 每条干线当前车辆数 [在途, 装卸, 异常]，由扁平数组解码统计 */
     routeFleet: [] as [number, number, number][],
     events: [] as AnomalyEvent[],
+    /** 已收到的最大事件 id 与最后一包的服务端时间：订阅时带给引擎补收空窗事件 */
+    eventCursor: 0,
+    alertCursor: 0,
     alertStats: null as AlertStats | null,
     shipments: null as ShipmentStats | null,
     cold: null as ColdStats | null,
@@ -273,8 +289,16 @@ export const useDashboardStore = defineStore('dashboard', {
       if (msg.cold) this.cold = msg.cold
       if (msg.safety) this.safety = msg.safety
       if (msg.events) this.mergeEvents(msg.events)
+      if (typeof msg.eventSeq === 'number') this.eventCursor = Math.max(this.eventCursor, msg.eventSeq)
+      this.alertCursor = msg.ts
       this.mapVersion++
       this.chartVersion++
+    },
+    applyCatchup(msg: CatchupMsg) {
+      this.syncEngine(msg.engineId)
+      this.mergeEvents([...msg.events, ...msg.alertUpdates])
+      this.alertCursor = Math.max(this.alertCursor, msg.ts)
+      if (msg.truncated) this.notify('重连期间的事件超过引擎保留窗口，告警历史可能不完整')
     },
     applyDelta(msg: DeltaMsg, payloadKB: number) {
       this.syncEngine(msg.engineId)
@@ -302,6 +326,7 @@ export const useDashboardStore = defineStore('dashboard', {
       if (msg.cold) this.cold = msg.cold
       if (msg.safety) this.safety = msg.safety
       this.mergeEvents(msg.alertUpdates ? [...msg.events, ...msg.alertUpdates] : msg.events)
+      this.alertCursor = msg.ts
       this.lastDeltaKB = payloadKB
       this.latencyMs = Math.max(0, Date.now() - msg.ts)
       this.lastDeltaAt = Date.now()
@@ -375,6 +400,8 @@ export const useDashboardStore = defineStore('dashboard', {
     syncEngine(id?: string) {
       if (id && id !== this.engineId) {
         this.events = []
+        this.eventCursor = 0
+        this.alertCursor = 0
         this.activeEvent = null
         this.selectedHubId = null
         this.selectedRouteIndex = null
@@ -383,8 +410,13 @@ export const useDashboardStore = defineStore('dashboard', {
       }
     },
     mergeEvents(events: AnomalyEvent[]) {
-      // 后到的同 id 对象覆盖先前的（处置更新），再按新到旧截到 60 条
-      const all = new Map([...this.events, ...events].map((event) => [event.id, event]))
+      // 同 id 以 updatedAt 新的为准（补收包与增量包可能乱序到达），再按新到旧截到 60 条
+      const all = new Map(this.events.map((event) => [event.id, event]))
+      for (const event of events) {
+        const known = all.get(event.id)
+        if (!known || (event.updatedAt ?? 0) >= (known.updatedAt ?? 0)) all.set(event.id, event)
+        if (event.id > this.eventCursor) this.eventCursor = event.id
+      }
       this.events = [...all.values()].sort((a, b) => b.id - a.id).slice(0, 60)
       if (this.activeEvent) {
         const latest = all.get(this.activeEvent.id)

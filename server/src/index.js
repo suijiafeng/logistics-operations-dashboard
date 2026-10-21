@@ -3,7 +3,7 @@
 import http from 'node:http'
 import zlib from 'node:zlib'
 import { WebSocketServer } from 'ws'
-import { step, snapshot, delta, vehicleDetail, updateAlert, ALERT_STATUS, recordHistoryFrame, historyIndex, historyFrame, vehicleTrail, vehicleTempSeries, HISTORY_INTERVAL } from './engine.js'
+import { step, snapshot, delta, catchUp, eventCursor, vehicleDetail, updateAlert, ALERT_STATUS, recordHistoryFrame, historyIndex, historyFrame, vehicleTrail, vehicleTempSeries, HISTORY_INTERVAL } from './engine.js'
 
 const PORT = process.env.PORT || 8787
 const configuredMaxBuffered = Number(process.env.WS_MAX_BUFFERED_BYTES || 1_000_000)
@@ -121,47 +121,83 @@ const server = http.createServer((req, res) => {
 // 消息压缩（permessage-deflate，浏览器原生支持）：每秒增量包约 227KB → 约 85KB。
 // 按连接分别压缩，最快档每个连接每秒约多花 3–4ms CPU；小于 1KB 的消息不压缩
 const wss = new WebSocketServer({ server, perMessageDeflate: { zlibDeflateOptions: { level: 1 }, threshold: 1024 } })
+// 每个连接记录已送达的事件游标（事件 id + 服务端时间）：客户端订阅时带来快照游标补收空窗事件；
+// 慢客户端被跳过的那几包里的事件，在恢复发送前按同一游标补发，不依赖下一包覆盖
+function sendCatchUp(ws) {
+  const { eventId, updatedAt } = ws.cursor
+  const body = catchUp(eventId, updatedAt)
+  ws.cursor = { eventId: eventCursor(), updatedAt: body.ts }
+  ws.missed = false
+  ws.send(JSON.stringify(body), (error) => { if (error) console.error('[ws] catch-up send failed', error.message) })
+}
+
 wss.on('connection', (ws) => {
   console.log('[ws] client connected, total =', wss.clients.size)
+  ws.cursor = { eventId: eventCursor(), updatedAt: Date.now() }
+  ws.missed = false
   ws.send(JSON.stringify({ type: 'hello', ts: Date.now() }))
+  ws.on('message', (raw) => {
+    let msg
+    try { msg = JSON.parse(String(raw)) } catch { return }
+    if (!msg || msg.type !== 'subscribe') return
+    const since = Number(msg.sinceEventId), at = Number(msg.sinceUpdatedAt)
+    if (!Number.isInteger(since) || since < 0 || !Number.isFinite(at) || at < 0) return
+    ws.cursor = { eventId: since, updatedAt: at }
+    sendCatchUp(ws)
+  })
   ws.on('close', () => console.log('[ws] client disconnected, total =', wss.clients.size))
   ws.on('error', (error) => console.error('[ws] client error', error.message))
 })
-wss.on('error', (error) => console.error('[ws] server error', error))
+// 监听失败会同时经 ws 转发到这里，由下方 server 'error' 统一处理退出，这里不重复刷堆栈
+wss.on('error', (error) => { if (server.listening) console.error('[ws] server error', error) })
 
 // 仿真步进
-setInterval(() => step(250), 250)
+const timers = [setInterval(() => step(250), 250)]
 // 历史帧：启动即记第一帧，之后每 10 秒一帧，环形保留 1 小时
 recordHistoryFrame()
-setInterval(() => recordHistoryFrame(), HISTORY_INTERVAL)
+timers.push(setInterval(() => recordHistoryFrame(), HISTORY_INTERVAL))
 
 // 1 秒聚合广播
 let lastBytes = 0
 let skippedSlowClients = 0
-setInterval(() => {
+timers.push(setInterval(() => {
   if (wss.clients.size === 0) return
-  const body = JSON.stringify(delta())
+  const payload = delta()
+  const body = JSON.stringify(payload)
   lastBytes = body.length
+  const cursor = { eventId: eventCursor(), updatedAt: payload.ts }
   for (const ws of wss.clients) {
     if (ws.readyState !== ws.OPEN) continue
     if (ws.bufferedAmount > MAX_BUFFERED_BYTES) {
       skippedSlowClients++
+      ws.missed = true
       continue
     }
+    if (ws.missed) sendCatchUp(ws)
+    ws.cursor = cursor
     ws.send(body, (error) => {
       if (error) console.error('[ws] send failed', error.message)
     })
   }
-}, 1000)
-setInterval(() => {
+}, 1000))
+timers.push(setInterval(() => {
   if (lastBytes) {
     const skipped = skippedSlowClients ? `, skipped slow clients ${skippedSlowClients}` : ''
     console.log(`[delta] ${(lastBytes / 1024).toFixed(1)} KB/s → ${wss.clients.size} clients${skipped}`)
     skippedSlowClients = 0
   }
-}, 15000)
+}, 15000))
 
 server.on('error', (error) => {
+  // 监听失败（端口被占等）是启动失败而不是连接级错误：清掉定时器与 WS 后非零退出，
+  // 否则进程靠定时器活着却没有监听，一键启动器看不到失败，前端还可能连到同端口的别的引擎
+  if (!server.listening) {
+    const reason = error.code === 'EADDRINUSE' ? `端口 ${PORT} 已被占用` : error.code || error.message
+    console.error(`[http] 引擎启动失败：${reason}`)
+    for (const timer of timers) clearInterval(timer)
+    wss.close()
+    process.exit(1)
+  }
   console.error('[http] server error', error)
 })
 
