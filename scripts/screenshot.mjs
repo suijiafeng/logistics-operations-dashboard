@@ -21,6 +21,7 @@ const SHOTS = [
   { name: 'screenshot-guangdong', width: 1920, height: 1080, setup: "window.__dashboard.setView('440000')" },
   { name: 'screenshot-hub-detail', width: 1920, height: 1080, setup: "window.__dashboard.setView('440000'); window.__dashboard.selectHub('sz')" },
   { name: 'screenshot-vehicle-playback', width: 1920, height: 1080, setup: "window.__dashboard.selectVehicle('粤A·10021'); setTimeout(() => document.querySelector('.timeline .opener')?.click(), 2500)" },
+  { name: 'screenshot-cold-chain', width: 1920, height: 1080, setup: "const v = window.__dashboard.vehicles; for (let i = 0; i < 12000; i++) if (Math.floor(v[i*3+2] / 1000) === 1) { window.__dashboard.selectVehicle('粤A·' + (10000 + i)); break } setTimeout(() => document.querySelectorAll('.tabs button')[2]?.click(), 1500)" },
   { name: 'screenshot-1440x900', width: 1440, height: 900, setup: '' },
   { name: 'screenshot-1366x768', width: 1366, height: 768, setup: '' },
 ]

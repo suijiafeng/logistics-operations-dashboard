@@ -76,24 +76,34 @@ export function useEcharts(): { el: Ref<HTMLDivElement | null>; chart: ShallowRe
   watch(motion, syncMotion)
   watch(() => [store.quality, store.screenScale], onResize)
 
-  onMounted(() => {
-    if (el.value) {
-      rebuild()
-      observer = new ResizeObserver(onResize)
-      observer.observe(el.value)
-      for (const name of POINTER_EVENTS) el.value.addEventListener(name, unzoomPointer, true)
-      armResolution()
-      window.addEventListener('resize', onResize)
-    }
-  })
-  onBeforeUnmount(() => {
+  // 容器可能晚于组件挂载才出现（如抽屉里按条件渲染的温度曲线），所以按 el 的出现 / 消失挂接与拆除
+  function attach(node: HTMLDivElement) {
+    rebuild()
+    observer = new ResizeObserver(onResize)
+    observer.observe(node)
+    for (const name of POINTER_EVENTS) node.addEventListener(name, unzoomPointer, true)
+  }
+  function detach(node: HTMLDivElement | null) {
     observer?.disconnect()
-    for (const name of POINTER_EVENTS) el.value?.removeEventListener(name, unzoomPointer, true)
-    resolution?.removeEventListener('change', resolutionChanged)
-    window.removeEventListener('resize', onResize)
+    observer = undefined
+    for (const name of POINTER_EVENTS) node?.removeEventListener(name, unzoomPointer, true)
     window.clearTimeout(resizeTimer)
     chart.value?.dispose()
     chart.value = null
+  }
+  onMounted(() => {
+    armResolution()
+    window.addEventListener('resize', onResize)
+    if (el.value) attach(el.value)
+  })
+  watch(el, (node, old) => {
+    if (old) detach(old)
+    if (node) attach(node)
+  })
+  onBeforeUnmount(() => {
+    detach(el.value)
+    resolution?.removeEventListener('change', resolutionChanged)
+    window.removeEventListener('resize', onResize)
   })
   return { el, chart, onResized: (cb: () => void) => { resizedCallbacks.push(cb) } }
 }

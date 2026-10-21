@@ -1,25 +1,21 @@
+<script lang="ts">
+/** 桑基图取省际前 N 对；InsightPanel 的说明文字也用这个常量 */
+export const OD_TOP = 12
+</script>
+
 <script setup lang="ts">
 import { computed, watch } from 'vue'
-import Panel from './Panel.vue'
 import { useEcharts, TEXT, TOOLTIP } from '../services/useEcharts'
 import { COLORS, FONT } from '../design/tokens'
 import { useDashboardStore } from '../stores/dashboard'
 import { provinceShortName } from '../data/provinces'
 import { fmtCompact, fmtInt } from '../services/format'
 
-// 省际 OD 流向：左列发出省、右列到达省，流量 = 今日由实体统计的运单数（启动回填按线路单量均分两向）。
+// 省际 OD 流向（面板正文，由 InsightPanel 的页签承载）：左列发出省、右列到达省，流量 = 今日由实体统计的运单数。
 // 省内流向（珠三角互发）远大于省际，引擎只给合计，不进图；同一省同时出现在两侧时用不同节点避免成环。
-const TOP = 12
 const store = useDashboardStore()
 const { el, chart } = useEcharts()
-const flows = computed(() => (store.shipments?.od ?? []).slice(0, TOP))
-const extra = computed(() => {
-  const s = store.shipments
-  if (!s) return '发出省 → 到达省'
-  const inter = Math.max(0, s.odTotal - s.odIntra)
-  const shown = flows.value.reduce((sum, f) => sum + f.value, 0)
-  return `省际前 ${flows.value.length} 对 · 占省际 ${inter ? Math.round(shown / inter * 100) : 0}% · 省内另有 ${fmtCompact(s.odIntra)} 单`
-})
+const flows = computed(() => (store.shipments?.od ?? []).slice(0, OD_TOP))
 
 function render() {
   const c = chart.value
@@ -64,9 +60,7 @@ watch([chart, () => store.chartVersion], render)
 </script>
 
 <template>
-  <Panel title="省际 OD 流向" :extra="extra">
-    <div ref="el" class="chart" role="img" :aria-label="`省际运单流向桑基图：${flows.map((f) => `${provinceShortName(f.from)}到${provinceShortName(f.to)} ${fmtCompact(f.value)} 单`).join('，')}`" />
-  </Panel>
+  <div ref="el" class="chart" role="img" :aria-label="`省际运单流向桑基图：${flows.map((f) => `${provinceShortName(f.from)}到${provinceShortName(f.to)} ${fmtCompact(f.value)} 单`).join('，')}`" />
 </template>
 
 <style scoped>

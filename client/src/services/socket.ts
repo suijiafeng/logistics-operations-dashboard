@@ -79,6 +79,12 @@ function validStats(value: Record<string, unknown>, fullHubs: boolean) {
       ['funnel', 'inStage'].every(k => Array.isArray(s[k]) && (s[k] as unknown[]).length === 5 && (s[k] as unknown[]).every(n => finite(n) && n >= 0)) &&
       ['signedToday', 'live', 'avgDelayMin', 'odIntra', 'odTotal'].every(k => finite(s[k])) && named(s.punctuality) &&
       Array.isArray(s.od) && s.od.every(f => isRecord(f) && isString(f.from) && isString(f.to) && finite(f.value))) &&
+    optional(value.cold, c => isRecord(c) && ['count', 'overCount', 'alertsToday', 'avgDeviation'].every(k => finite(c[k])) &&
+      Array.isArray(c.overIndices) && c.overIndices.every(n => Number.isInteger(n) && (n as number) >= 0) &&
+      Array.isArray(c.over) && c.over.every(o => isRecord(o) && Number.isInteger(o.index) && isString(o.plate) && isString(o.driver) && ['temp', 'lo', 'hi', 'since'].every(k => finite(o[k])))) &&
+    optional(value.safety, s => isRecord(s) && isRecord(s.today) && ['speeding', 'braking', 'fatigue'].every(k => finite((s.today as Record<string, unknown>)[k])) &&
+      finite(s.avgScore) && finite(s.flagged) && Array.isArray(s.worst) && s.worst.every(d => isRecord(d) && Number.isInteger(d.index) && isString(d.plate) && isString(d.driver) && ['score', 'speeding', 'braking', 'fatigue'].every(k => finite(d[k]))) &&
+      Array.isArray(s.recent) && s.recent.every(e => isRecord(e) && finite(e.id) && finite(e.ts) && isString(e.label) && isString(e.plate) && isString(e.driver))) &&
     optional(value.alertStats, s => isRecord(s) && ['open', 'acked', 'handling', 'closedToday', 'closedManual'].every(k => finite(s[k]) && (s[k] as number) >= 0) &&
       (s.avgHandleMin === null || finite(s.avgHandleMin)) && Array.isArray(s.byLevel) && s.byLevel.length === 3 && s.byLevel.every(finite))
 }

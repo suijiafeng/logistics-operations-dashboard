@@ -1,9 +1,19 @@
 // 单车详情按需查询（引擎 /vehicles/:plate），与 1Hz 增量包解耦；车牌与扁平数组下标一一对应：粤A·10000 → 下标 0
 const apiBase = (import.meta.env.VITE_API_BASE || '/api').replace(/\/$/, '')
 
+export interface SafetyCounts { speeding: number; braking: number; fatigue: number }
 export interface VehicleDetail {
   plate: string
   status: number
+  /** 0 普通 / 1 冷链 */
+  kind: number
+  driver: string
+  score: number
+  safety: SafetyCounts
+  temp?: number
+  tempLo?: number
+  tempHi?: number
+  overTemp?: boolean
   fromId: string
   toId: string
   routeIndex: number
@@ -18,10 +28,12 @@ export interface VehicleDetail {
 }
 
 export const PLATE_BASE = 10000
-/** 扁平数组第三位 = 状态 × ROUTE_CODE + 线路下标（与引擎一致） */
+/** 扁平数组第三位 = 类型 × VEHICLE_KIND + 状态 × ROUTE_CODE + 线路下标（与引擎一致） */
 export const ROUTE_CODE = 100
-export function statusOf(code: number) { return Math.floor(code / ROUTE_CODE) }
+export const VEHICLE_KIND = 1000
+export function statusOf(code: number) { return Math.floor(code / ROUTE_CODE) % 10 }
 export function routeOf(code: number) { return code % ROUTE_CODE }
+export function kindOf(code: number) { return Math.floor(code / VEHICLE_KIND) }
 
 export function plateOf(index: number) { return `粤A·${PLATE_BASE + index}` }
 
@@ -37,7 +49,10 @@ const finite = (n: unknown): n is number => typeof n === 'number' && Number.isFi
 function isDetail(v: unknown): v is VehicleDetail {
   if (typeof v !== 'object' || v === null) return false
   const d = v as Record<string, unknown>
+  const safety = d.safety as Record<string, unknown> | undefined
   return typeof d.plate === 'string' && finite(d.status) && typeof d.fromId === 'string' && typeof d.toId === 'string' &&
+    finite(d.kind) && typeof d.driver === 'string' && finite(d.score) && !!safety && ['speeding', 'braking', 'fatigue'].every((k) => finite(safety[k])) &&
+    (d.temp === undefined || (finite(d.temp) && finite(d.tempLo) && finite(d.tempHi))) &&
     Number.isInteger(d.routeIndex) && Array.isArray(d.position) && d.position.length === 2 && d.position.every(finite) &&
     finite(d.heading) && finite(d.speedKmh) && finite(d.routeKm) && finite(d.traveledKm) && finite(d.remainingKm) &&
     (d.etaMin === null || finite(d.etaMin))

@@ -6,10 +6,10 @@ import { statusOf, routeOf, indexOfPlate, type VehicleDetail } from '../services
 import { postAlertStatus } from '../services/alerts'
 import type { TrailPoint } from '../services/history'
 
-export type LayerKey = 'routes' | 'enroute' | 'dwell' | 'anomaly' | 'hubs' | 'alerts'
-export const LAYER_KEYS: LayerKey[] = ['routes', 'enroute', 'dwell', 'anomaly', 'hubs', 'alerts']
+export type LayerKey = 'routes' | 'enroute' | 'dwell' | 'anomaly' | 'hubs' | 'alerts' | 'cold'
+export const LAYER_KEYS: LayerKey[] = ['routes', 'enroute', 'dwell', 'anomaly', 'hubs', 'alerts', 'cold']
 function loadLayers(): Record<LayerKey, boolean> {
-  const layers = { routes: true, enroute: true, dwell: true, anomaly: true, hubs: true, alerts: true }
+  const layers = { routes: true, enroute: true, dwell: true, anomaly: true, hubs: true, alerts: true, cold: true }
   try {
     const saved = JSON.parse(localStorage.getItem('logistics-layers') || '{}') as Partial<Record<LayerKey, boolean>>
     for (const key of LAYER_KEYS) if (typeof saved[key] === 'boolean') layers[key] = saved[key]!
@@ -62,6 +62,12 @@ export interface AlertStats {
 }
 export function isAlertOpen(event: AnomalyEvent) { return event.status !== 'closed' }
 
+export interface ColdOver { index: number; plate: string; driver: string; temp: number; lo: number; hi: number; since: number; alert: boolean }
+export interface ColdStats { count: number; overCount: number; over: ColdOver[]; overIndices: number[]; alertsToday: number; avgDeviation: number }
+export interface SafetyDriver { index: number; plate: string; driver: string; score: number; speeding: number; braking: number; fatigue: number }
+export interface SafetyEvent { id: number; ts: number; type: string; label: string; plate: string; driver: string; routeIndex: number; speed: number; score: number }
+export interface SafetyStats { today: { speeding: number; braking: number; fatigue: number }; avgScore: number; flagged: number; worst: SafetyDriver[]; recent: SafetyEvent[] }
+
 /** 运单实体聚合：五段漏斗累计、各段在制、签收与时效、省际 OD（adcode） */
 export interface ShipmentStats {
   stages: string[]
@@ -102,6 +108,8 @@ export interface SnapshotMsg {
   routeOrders?: number[]
   alertStats?: AlertStats
   shipments?: ShipmentStats
+  cold?: ColdStats
+  safety?: SafetyStats
 }
 
 export interface DeltaMsg {
@@ -121,6 +129,8 @@ export interface DeltaMsg {
   alertUpdates?: AnomalyEvent[]
   alertStats?: AlertStats
   shipments?: ShipmentStats
+  cold?: ColdStats
+  safety?: SafetyStats
 }
 
 function countFleet(flat: number[]): [number, number, number][] {
@@ -165,6 +175,8 @@ export const useDashboardStore = defineStore('dashboard', {
     events: [] as AnomalyEvent[],
     alertStats: null as AlertStats | null,
     shipments: null as ShipmentStats | null,
+    cold: null as ColdStats | null,
+    safety: null as SafetyStats | null,
     /** 告警面板筛选：待处理（未关闭）/ 全部 */
     alertFilter: 'pending' as 'pending' | 'all',
     /** 正在提交处置的告警 id，防止重复点击 */
@@ -258,6 +270,8 @@ export const useDashboardStore = defineStore('dashboard', {
       if (msg.routeOrders) this.routeOrders = msg.routeOrders
       if (msg.alertStats) this.alertStats = msg.alertStats
       if (msg.shipments) this.shipments = msg.shipments
+      if (msg.cold) this.cold = msg.cold
+      if (msg.safety) this.safety = msg.safety
       if (msg.events) this.mergeEvents(msg.events)
       this.mapVersion++
       this.chartVersion++
@@ -285,6 +299,8 @@ export const useDashboardStore = defineStore('dashboard', {
       if (msg.routeOrders) this.routeOrders = msg.routeOrders
       if (msg.alertStats) this.alertStats = msg.alertStats
       if (msg.shipments) this.shipments = msg.shipments
+      if (msg.cold) this.cold = msg.cold
+      if (msg.safety) this.safety = msg.safety
       this.mergeEvents(msg.alertUpdates ? [...msg.events, ...msg.alertUpdates] : msg.events)
       this.lastDeltaKB = payloadKB
       this.latencyMs = Math.max(0, Date.now() - msg.ts)

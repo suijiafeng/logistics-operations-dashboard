@@ -4,7 +4,9 @@ import { useDashboardStore } from '../stores/dashboard'
 import { useFocus } from '../services/useFocus'
 import { hubById } from '../data/network'
 import { fetchVehicle } from '../services/vehicles'
-import { fetchVehicleTrail } from '../services/history'
+import { fetchVehicleTrail, fetchVehicleTemps, type TempSeries } from '../services/history'
+import { useEcharts, TEXT, TOOLTIP } from '../services/useEcharts'
+import { COLORS, FONT } from '../design/tokens'
 import { fmtInt } from '../services/format'
 
 // 车辆抽屉：详情由 /vehicles/:plate 每 2 秒轮询（速度、朝向、里程、ETA），位置由地图按 1Hz 增量包下标跟随
@@ -15,6 +17,43 @@ const store = useDashboardStore()
 const { focusHub } = useFocus()
 const loading = ref(false)
 let timer: number | undefined
+// 冷链温度曲线：每 10 秒拉一次最近 1 小时序列，范围带 + 目标线 + 当前值
+const temps = ref<TempSeries | null>(null)
+const { el: tempEl, chart: tempChart } = useEcharts()
+let tempTimer: number | undefined
+const isCold = computed(() => detail.value?.kind === 1)
+const scoreTone = computed(() => { const s = detail.value?.score ?? 100; return s < 80 ? 'danger' : s < 90 ? 'warn' : 'ok' })
+async function loadTemps(value: string) {
+  try {
+    const series = await fetchVehicleTemps(value)
+    if (plate.value === value) temps.value = series
+  } catch { /* 曲线失败不影响其余详情 */ }
+}
+function renderTemps() {
+  const c = tempChart.value, t = temps.value
+  if (!c || !t) return
+  const data = t.samples.map(([ts, v]) => [ts, v])
+  const values = data.map((d) => d[1]!)
+  const lo = Math.min(t.lo - 3, ...values), hi = Math.max(t.hi + 3, ...values)
+  c.setOption({
+    grid: { left: 4, right: 6, top: 8, bottom: 2, containLabel: true },
+    tooltip: { ...TOOLTIP, trigger: 'axis', formatter: (ps: { value: [number, number] }[]) => {
+      const p = ps[0]; if (!p) return ''
+      return `${new Date(p.value[0]).toLocaleTimeString('zh-CN', { hour12: false, timeZone: 'Asia/Shanghai' })} · ${p.value[1].toFixed(1)}℃`
+    } },
+    xAxis: { type: 'time', axisLine: { lineStyle: { color: COLORS.border } }, axisTick: { show: false },
+      axisLabel: { ...TEXT, fontFamily: FONT.number, fontSize: 10, hideOverlap: true, formatter: (v: number) => new Date(v).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Shanghai' }) } },
+    yAxis: { type: 'value', min: Math.floor(lo), max: Math.ceil(hi), splitNumber: 3, splitLine: { lineStyle: { color: COLORS.track } },
+      axisLabel: { ...TEXT, fontFamily: FONT.number, fontSize: 10, formatter: '{value}℃' } },
+    series: [{
+      type: 'line', data, showSymbol: false, smooth: 0.3,
+      lineStyle: { color: '#3fd1c8', width: 1.5 }, areaStyle: { color: 'rgba(63, 209, 200, 0.12)' },
+      markArea: { silent: true, itemStyle: { color: 'rgba(52, 199, 123, 0.12)' }, data: [[{ yAxis: t.lo }, { yAxis: t.hi }]] },
+      markLine: { silent: true, symbol: 'none', lineStyle: { color: COLORS.secondary, type: 'dashed', width: 1 }, label: { show: false }, data: [{ yAxis: t.target }] },
+    }],
+  }, { notMerge: true })
+}
+watch([tempChart, temps], renderTemps)
 let controller: AbortController | undefined
 
 const plate = computed(() => store.selectedPlate)
@@ -59,9 +98,11 @@ async function poll() {
 
 function stop() {
   window.clearInterval(timer)
-  timer = undefined
+  window.clearInterval(tempTimer)
+  timer = tempTimer = undefined
   controller?.abort()
   controller = undefined
+  temps.value = null
 }
 
 // 尾迹：选中时拉一次最近 1 小时（10 秒一帧），之后由 store 按 1Hz 增量追加
@@ -86,6 +127,14 @@ watch(plate, (value) => {
   void loadTrail(value)
   timer = window.setInterval(() => { if (!document.hidden) void poll() }, POLL_MS)
 }, { immediate: true })
+// 详情到达后才知道是不是冷链车：是则开始拉温度曲线
+watch(isCold, (cold) => {
+  window.clearInterval(tempTimer)
+  tempTimer = undefined
+  if (!cold || !plate.value) return
+  void loadTemps(plate.value)
+  tempTimer = window.setInterval(() => { if (!document.hidden && plate.value) void loadTemps(plate.value) }, 10_000)
+})
 onBeforeUnmount(stop)
 </script>
 
@@ -117,6 +166,23 @@ onBeforeUnmount(stop)
           <span>剩余 {{ fmtInt(detail.remainingKm) }} km</span>
         </div>
       </div>
+
+      <div class="driver" :title="`${detail.driver} · 安全评分 ${detail.score}（100 分起扣：超速 -2、急刹 -1、疲劳 -5）· 今日超速 ${detail.safety.speeding} 急刹 ${detail.safety.braking} 疲劳 ${detail.safety.fatigue}`">
+        <span class="name">{{ detail.driver }}</span>
+        <span v-if="isCold" class="tag cold">冷链</span>
+        <span class="score" :class="scoreTone">安全 {{ detail.score }} 分</span>
+        <span class="counts">超{{ detail.safety.speeding }} 刹{{ detail.safety.braking }} 疲{{ detail.safety.fatigue }}</span>
+      </div>
+
+      <section v-if="isCold" class="temp">
+        <div class="temp-head">
+          <span>厢体温度<em v-if="detail.overTemp" class="hot">超温</em></span>
+          <b :class="{ hot: detail.overTemp }">{{ detail.temp?.toFixed(1) }}℃</b>
+          <small>范围 {{ detail.tempLo }}…{{ detail.tempHi }}℃</small>
+        </div>
+        <div ref="tempEl" class="temp-chart" role="img" :aria-label="`最近 1 小时厢体温度曲线，当前 ${detail.temp}℃，允许范围 ${detail.tempLo} 到 ${detail.tempHi}℃`" />
+        <p class="temp-note">{{ temps ? `最近 ${Math.round(temps.samples.length * temps.interval / 60_000)} 分钟 · 10 秒一采 · 绿带为允许范围，虚线为设定温度` : '温度曲线加载中…' }}</p>
+      </section>
 
       <dl class="metrics">
         <div class="metric"><dt>当前车速</dt><dd><span class="v">{{ detail.speedKmh }}</span><small>km/h</small></dd></div>
@@ -162,6 +228,22 @@ h4 { font-family: var(--font-number); font-size: 18px; font-weight: 700; color: 
 .close { flex: none; background: none; border: none; color: var(--color-tertiary); font-size: 18px; line-height: 1; cursor: pointer; border-radius: var(--radius-control); }
 .close:hover { background: var(--color-hover); color: var(--color-heading); }
 
+.driver { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: var(--space-3); font-size: var(--font-small); }
+.driver .name { color: var(--color-heading); font-weight: 500; }
+.tag { padding: 0 6px; border-radius: 8px; font-size: 10px; line-height: 16px; }
+.tag.cold { background: rgba(63, 209, 200, 0.18); color: #7fe3dd; }
+.score { padding: 0 6px; border-radius: 8px; font-family: var(--font-number); font-size: 11px; line-height: 16px; background: var(--color-elevated); color: var(--color-heading); }
+.score.warn { color: var(--color-warning); }
+.score.danger { color: var(--color-dangerText); }
+.driver .counts { font-size: 11px; color: var(--color-tertiary); }
+.temp { margin-top: var(--space-3); padding: 8px 10px; border-radius: var(--radius-tile); background: var(--color-elevated); }
+.temp-head { display: flex; align-items: baseline; gap: var(--space-2); font-size: var(--font-small); color: var(--color-secondary); }
+.temp-head b { font-family: var(--font-number); font-size: 18px; color: #7fe3dd; font-variant-numeric: tabular-nums; }
+.temp-head b.hot, .temp-head .hot { color: var(--color-dangerText); }
+.temp-head em { font-style: normal; margin-left: 6px; font-size: 11px; }
+.temp-head small { margin-left: auto; font-size: 11px; color: var(--color-tertiary); }
+.temp-chart { height: 84px; margin-top: 4px; }
+.temp-note { margin-top: 2px; font-size: 10px; color: var(--color-tertiary); }
 .route { display: flex; align-items: center; gap: var(--space-2); margin-top: var(--space-4); }
 .hub {
   flex: 1;

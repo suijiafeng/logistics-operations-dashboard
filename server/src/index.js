@@ -3,7 +3,7 @@
 import http from 'node:http'
 import zlib from 'node:zlib'
 import { WebSocketServer } from 'ws'
-import { step, snapshot, delta, vehicleDetail, updateAlert, ALERT_STATUS, recordHistoryFrame, historyIndex, historyFrame, vehicleTrail, HISTORY_INTERVAL } from './engine.js'
+import { step, snapshot, delta, vehicleDetail, updateAlert, ALERT_STATUS, recordHistoryFrame, historyIndex, historyFrame, vehicleTrail, vehicleTempSeries, HISTORY_INTERVAL } from './engine.js'
 
 const PORT = process.env.PORT || 8787
 const configuredMaxBuffered = Number(process.env.WS_MAX_BUFFERED_BYTES || 1_000_000)
@@ -91,6 +91,12 @@ const server = http.createServer((req, res) => {
     let plate = ''
     try { plate = decodeURIComponent(rawPlate ?? '') } catch { plate = '' }
     res.setHeader('Content-Type', 'application/json')
+    if (sub === 'temps') {
+      const temps = plate ? vehicleTempSeries(plate) : null
+      if (!temps) { res.statusCode = 404; res.end(JSON.stringify({ error: 'not_cold_chain_vehicle' })); return }
+      res.end(JSON.stringify(temps))
+      return
+    }
     if (sub === 'trail') {
       const minutes = Math.min(60, Math.max(1, Number(new URLSearchParams(query).get('minutes')) || 60))
       const trail = plate ? vehicleTrail(plate, minutes * 60_000) : null

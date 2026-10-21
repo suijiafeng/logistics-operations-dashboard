@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useDashboardStore } from '../stores/dashboard'
-defineProps<{ title: string; extra?: string }>()
+defineProps<{ title: string; extra?: string; tabs?: { key: string; label: string }[]; active?: string }>()
+const emit = defineEmits<{ (e: 'update:active', key: string): void }>()
 const store = useDashboardStore()
 </script>
 
@@ -9,6 +10,9 @@ const store = useDashboardStore()
     <header class="panel-head">
       <span class="tick" />
       <h3>{{ title }}</h3>
+      <div v-if="tabs?.length" class="tabs" role="tablist">
+        <button v-for="t in tabs" :key="t.key" type="button" role="tab" :aria-selected="t.key === active" :class="{ on: t.key === active }" @click="emit('update:active', t.key)">{{ t.label }}</button>
+      </div>
       <span v-if="extra" class="extra" :title="extra">{{ extra }}</span>
     </header>
     <div class="panel-body" :class="{ pending: !store.hasData }" :aria-busy="store.dataStatus === 'loading'">
@@ -50,6 +54,10 @@ const store = useDashboardStore()
   color: var(--color-text);
   white-space: nowrap;
 }
+.tabs { display: flex; gap: 2px; margin-left: var(--space-2); flex: none; }
+.tabs button { min-height: 22px; min-width: 0; padding: 0 8px; border: 1px solid transparent; border-radius: 11px; background: transparent; color: var(--color-tertiary); font-size: 11px; cursor: pointer; white-space: nowrap; }
+.tabs button:hover { color: var(--color-heading); background: var(--color-hover); }
+.tabs button.on { background: var(--color-infoBg); border-color: var(--color-border); color: var(--color-heading); }
 .panel-head .extra {
   margin-left: auto;
   min-width: 0;

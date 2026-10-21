@@ -8,7 +8,7 @@ import RouteDetail from './components/RouteDetail.vue'
 import TrendChart from './components/TrendChart.vue'
 import KpiOverview from './components/KpiOverview.vue'
 import ShipmentFunnel from './components/ShipmentFunnel.vue'
-import OdSankey from './components/OdSankey.vue'
+import InsightPanel from './components/InsightPanel.vue'
 import TopHubs from './components/TopHubs.vue'
 import EventStream from './components/EventStream.vue'
 import WarehousePanel from './components/WarehousePanel.vue'
@@ -89,7 +89,7 @@ onBeforeUnmount(() => {
         </MapChart>
         <div class="col right">
           <EventStream />
-          <OdSankey />
+          <InsightPanel />
         </div>
       </main>
       <footer class="bottom">

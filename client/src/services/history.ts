@@ -29,6 +29,18 @@ export async function fetchHistoryFrame(ts: number, signal?: AbortSignal): Promi
   return body as HistoryFrame
 }
 
+export interface TempSeries { plate: string; lo: number; hi: number; target: number; interval: number; samples: [number, number][]; current: number; overSince: number | null }
+/** 冷链车温度序列：最近 1 小时每 10 秒一个样本；非冷链车返回 null */
+export async function fetchVehicleTemps(plate: string, signal?: AbortSignal): Promise<TempSeries | null> {
+  const res = await fetch(`${apiBase}/vehicles/${encodeURIComponent(plate)}/temps`, { signal })
+  if (res.status === 404) return null
+  if (!res.ok) throw new Error(`接口返回 HTTP ${res.status}`)
+  const body = await res.json() as Partial<TempSeries>
+  if (typeof body.plate !== 'string' || !finite(body.lo) || !finite(body.hi) || !finite(body.target) || !finite(body.current) ||
+    !Array.isArray(body.samples) || !body.samples.every((p) => Array.isArray(p) && p.length === 2 && p.every(finite))) throw new Error('温度数据格式不正确')
+  return body as TempSeries
+}
+
 export async function fetchVehicleTrail(plate: string, minutes = 60, signal?: AbortSignal): Promise<VehicleTrail> {
   const body = await getJson(`/vehicles/${encodeURIComponent(plate)}/trail?minutes=${minutes}`, signal) as Partial<VehicleTrail>
   if (typeof body.plate !== 'string' || !finite(body.interval) || !Array.isArray(body.points) ||

@@ -2,11 +2,12 @@
 // 状态机：EN_ROUTE（在途） → DWELL（到站装卸） → EN_ROUTE（换线） ；在途随机进入 ANOMALY（异常）
 // 车辆以公里为位置、km/h 为速度，仿真时钟按 TIME_SCALE 加速（1 真实秒 = 60 仿真秒），长途线路也能在几分钟内看到车辆走完。
 // 内部步进 250ms，聚合 1s 后批量推送 delta；车辆位置用扁平数组编码（[lng, lat, code] * N），不用对象数组，减小包体；
-// code = status × 100 + 线路下标，客户端据此按线路筛选车辆（线路不超过 100 条）。
+// code = 车辆类型 × 1000 + status × 100 + 线路下标（类型 0 普通 / 1 冷链），客户端据此按线路、类型筛选车辆（线路不超过 100 条）。
 
 import { HUBS, ROUTES, hubById } from './network.js'
 import { routeKm, pointAtKm, headingAtKm } from './routes.js'
 import { stepShipments, shipmentStats } from './shipments.js'
+import { initFleetExtras, stepColdChain, stepSafety, coldStats, safetyStats, recordTemps, vehicleTemps, resetFleetDaily, VEHICLE_KIND } from './fleet.js'
 import { readMetrics, readModes, readHubHistory, readYesterdayTrend } from './metrics.js'
 
 export const VEHICLE_COUNT = 12000
@@ -61,6 +62,8 @@ for (let i = 0; i < VEHICLE_COUNT; i++) {
     alertId: 0,
   })
 }
+// 冷链属性、司机与安全评分
+initFleetExtras(vehicles)
 
 const hubStats = {}
 for (const h of HUBS) {
@@ -104,10 +107,10 @@ const EVENT_TEMPLATES = [
   ['网点积压', '目的网点分拣积压，到站后需排队卸货'],
 ]
 
-function pushEvent(vehicle) {
+function pushEvent(vehicle, preset) {
   const [aId, bId] = ROUTES[vehicle.routeIdx]
   const [from, to] = vehicle.dir === 1 ? [aId, bId] : [bId, aId]
-  const [type, desc] = pick(EVENT_TEMPLATES)
+  const [type, desc] = preset ? [preset.type, preset.desc] : pick(EVENT_TEMPLATES)
   const event = {
     id: ++state.eventSeq,
     time: new Date().toLocaleTimeString('zh-CN', { hour12: false, timeZone: 'Asia/Shanghai' }),
@@ -119,7 +122,7 @@ function pushEvent(vehicle) {
     position: vehiclePos(vehicle),
     place: `${hubById[from].name} → ${hubById[to].name}`,
     desc: `${desc}${type === '延误' ? ` ${Math.floor(rand(20, 140))} 分钟` : ''}`,
-    level: type === '车辆故障' ? 2 : type === '偏航' ? 1 : 0,
+    level: preset ? preset.level : type === '车辆故障' ? 2 : type === '偏航' ? 1 : 0,
     // 处置字段：责任网点为目的网点（到站后由其接手），状态机见 ALERT_STATUS
     status: 'open',
     owner: to,
@@ -129,7 +132,7 @@ function pushEvent(vehicle) {
     closedAt: null,
     closedBy: null,
   }
-  vehicle.alertId = event.id
+  if (!preset) vehicle.alertId = event.id
   state.alerts.set(event.id, event)
   state.events.push(event)
   state.history = [event, ...state.history].slice(0, 60)
@@ -164,6 +167,10 @@ export function updateAlert(id, status, by = '大屏值班') {
 function recoverAlert(vehicle, now) {
   const alert = state.alerts.get(vehicle.alertId)
   vehicle.alertId = 0
+  recoverAlertById(alert, now)
+}
+
+function recoverAlertById(alert, now) {
   if (!alert || alert.status === 'closed') return
   alert.recoveredAt = now
   alert.updatedAt = now
@@ -209,6 +216,8 @@ export function vehicleDetail(plate) {
   const remainingKm = v.dir === 1 ? total - v.km : v.km
   return {
     plate: v.plate, status: v.status, fromId, toId, routeIndex: v.routeIdx,
+    kind: v.kind, driver: v.driver, score: v.score, safety: { ...v.safety },
+    ...(v.kind === 1 ? { temp: Math.round(v.temp * 10) / 10, tempLo: v.tempLo, tempHi: v.tempHi, overTemp: !!v.tempOverSince } : {}),
     position: vehiclePos(v), heading: Math.round(headingAtKm(v.routeIdx, v.km, v.dir)),
     speedKmh: v.status === STATUS.EN_ROUTE ? v.speedKmh : 0,
     routeKm: Math.round(total), traveledKm: Math.round(total - remainingKm), remainingKm: Math.round(remainingKm),
@@ -225,12 +234,20 @@ export function step(dtMs) {
     state.alerts.clear()
     state.alertChanges.clear()
     state.closedToday = []
+    resetFleetDaily(vehicles)
   }
   metrics = nextMetrics
   const dt = dtMs / 1000
   state.tick++
   // 运单实体与五段状态机（按同一批确定性运单累计创建实体）
   stepShipments(Date.now())
+  // 冷链温度与司机安全事件（每 4 步即每秒评估一次）
+  if (state.tick % 4 === 0) {
+    const now = Date.now()
+    const hooks = { alert: (v, preset) => { pushEvent(v, preset); return state.eventSeq }, recover: (id) => recoverAlertById(state.alerts.get(id), now), alertOf: (id) => state.alerts.get(id) }
+    stepColdChain(vehicles, 1, now, hooks)
+    stepSafety(vehicles, 1, now, hooks)
+  }
   let activeAnomalies = 0
   for (const v of vehicles) {
     const now = state.tick
@@ -315,8 +332,9 @@ export function recordHistoryFrame(ts = Date.now()) {
     const [lng, lat] = vehiclePos(vehicles[i])
     data[i * 3] = Math.round(lng * SCALE)
     data[i * 3 + 1] = Math.round(lat * SCALE)
-    data[i * 3 + 2] = vehicles[i].status * ROUTE_CODE + vehicles[i].routeIdx
+    data[i * 3 + 2] = vehicles[i].kind * VEHICLE_KIND + vehicles[i].status * ROUTE_CODE + vehicles[i].routeIdx
   }
+  recordTemps(vehicles, ts)
   const k = kpi()
   history.push({ ts, data, kpi: { enRoute: k.enRoute, pendingAnomalies: k.pendingAnomalies } })
   if (history.length > HISTORY_FRAMES) history.shift()
@@ -344,6 +362,11 @@ export function historyFrame(ts) {
 }
 
 /** 单车尾迹：最近 sinceMs 内各历史帧里该车的位置 [ts, lng, lat, status]，旧到新 */
+export function vehicleTempSeries(plate) {
+  const index = vehicles.findIndex((v) => v.plate === plate)
+  return index < 0 ? null : vehicleTemps(vehicles[index])
+}
+
 export function vehicleTrail(plate, sinceMs = 3_600_000) {
   const index = vehicles.findIndex((v) => v.plate === plate)
   if (index < 0) return null
@@ -351,7 +374,7 @@ export function vehicleTrail(plate, sinceMs = 3_600_000) {
   const points = []
   for (const frame of history) {
     if (frame.ts < from) continue
-    points.push([frame.ts, frame.data[index * 3] / SCALE, frame.data[index * 3 + 1] / SCALE, Math.floor(frame.data[index * 3 + 2] / ROUTE_CODE)])
+    points.push([frame.ts, frame.data[index * 3] / SCALE, frame.data[index * 3 + 1] / SCALE, Math.floor(frame.data[index * 3 + 2] / ROUTE_CODE) % 10])
   }
   return { plate, interval: HISTORY_INTERVAL, points }
 }
@@ -363,7 +386,7 @@ function flatPositions() {
     // 保留 5 位小数（约 1 米）：车辆沿真实道路行驶，城市级视图下 3 位小数会让车辆离开路面
     arr[i * 3] = Math.round(lng * 1e5) / 1e5
     arr[i * 3 + 1] = Math.round(lat * 1e5) / 1e5
-    arr[i * 3 + 2] = vehicles[i].status * ROUTE_CODE + vehicles[i].routeIdx
+    arr[i * 3 + 2] = vehicles[i].kind * VEHICLE_KIND + vehicles[i].status * ROUTE_CODE + vehicles[i].routeIdx
   }
   return arr
 }
@@ -409,6 +432,8 @@ export function snapshot() {
     trendYesterday: readYesterdayTrend(),
     modes: readModes(),
     ...shipmentPayload(),
+    cold: coldStats(vehicles),
+    safety: safetyStats(vehicles),
     routeVolumes: routeVolumes(),
     // 全部干线今日单量（ROUTES 顺序），供地图按单量分级与线路详情使用；排行仍只取前 8
     routeOrders: [...metrics.routes],
@@ -449,6 +474,8 @@ export function delta() {
     trendYesterday: readYesterdayTrend(),
     modes: readModes(),
     ...shipmentPayload(),
+    cold: coldStats(vehicles),
+    safety: safetyStats(vehicles),
     routeVolumes: routeVolumes(),
     routeOrders: [...metrics.routes],
     events,

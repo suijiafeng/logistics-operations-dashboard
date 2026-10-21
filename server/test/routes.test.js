@@ -49,8 +49,8 @@ test('车辆位置落在所属干线折线附近，网点坐标为园区 POI 且
     assert(lng > 73 && lng < 136 && lat > 18 && lat < 54)
     // 第三位 = 状态 × 100 + 线路下标
     const code = snap.vehicles[i * 3 + 2]
-    const status = Math.floor(code / ROUTE_CODE), route = code % ROUTE_CODE
-    assert(status >= 0 && status <= 2 && route >= 0 && route < ROUTES.length)
+    const kind = Math.floor(code / 1000), status = Math.floor(code / ROUTE_CODE) % 10, route = code % ROUTE_CODE
+    assert(kind >= 0 && kind <= 1 && status >= 0 && status <= 2 && route >= 0 && route < ROUTES.length)
   }
   // 全部干线今日单量与排行前 8 同源
   assert.equal(snap.routeOrders.length, ROUTES.length)

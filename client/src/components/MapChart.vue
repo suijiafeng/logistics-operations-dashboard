@@ -12,7 +12,7 @@ import { HUBS, ROUTES, hubById, hubsInProvince } from '../data/network'
 import { provinceByName } from '../data/provinces'
 import { routeCoords as routeGeometry, loadRoutes } from '../services/geo'
 import { loadRegion, geoAspect, type Region, type Geo } from '../services/region'
-import { plateOf, indexOfPlate, statusOf, routeOf } from '../services/vehicles'
+import { plateOf, indexOfPlate, statusOf, routeOf, kindOf } from '../services/vehicles'
 import { ROUTE_GEOMETRY } from '../services/geo'
 import chinaGeo from '../assets/geo/china.json'
 
@@ -64,6 +64,8 @@ const STATUS_COLORS = [COLORS.vehicle, COLORS.bar, RED] // 在途 / 装卸 / 异
 const STATUS_SIZES = [4, 4, 6]
 const STATUS_LAYER: LayerKey[] = ['enroute', 'dwell', 'anomaly']
 const STATUS_TEXT = ['在途', '装卸', '异常']
+// 冷链车：青色点；超温车辆另加菱形标记（已告警的红边）
+const COLD = '#3fd1c8'
 const DRAWER_SPAN = 300 + 16 * 2 + 8
 
 const LAYER_ROWS: { key: LayerKey; label: string; dot: string }[] = [
@@ -73,6 +75,7 @@ const LAYER_ROWS: { key: LayerKey; label: string; dot: string }[] = [
   { key: 'routes', label: '干线 · 粗细按单量', dot: 'route' },
   { key: 'hubs', label: '网点', dot: 'hub' },
   { key: 'alerts', label: '告警 · 未关闭', dot: 'alert' },
+  { key: 'cold', label: '冷链 · 超温标记', dot: 'cold' },
 ]
 const legendTotal = computed(() => statusCounts.value[0] + statusCounts.value[1] + statusCounts.value[2])
 const drawerOpen = computed(() => store.hasData && (!!store.selectedHub || !!store.selectedPlate || store.selectedRouteIndex !== null))
@@ -117,9 +120,9 @@ function visibleHubs() {
 }
 
 /** 把扁平车辆数组按状态拆成三组散点数据（只取前 limit 台做分片渐进）；数据项第三位为车辆下标，点击时换算车牌。
- *  选中干线时，线上车辆进三组正常散点，线外车辆并入第四组淡化散点 */
+ *  选中干线时，线上车辆进三组正常散点，线外车辆并入第四组淡化散点；冷链图层开启时，在途 / 装卸的冷链车进第五组青色散点 */
 function vehicleSeriesData(limit: number) {
-  const groups: [number, number, number][][] = [[], [], [], []]
+  const groups: [number, number, number][][] = [[], [], [], [], []]
   const flat = activeFlat()
   const total = Math.min(limit, store.vehicleCount, Math.floor(flat.length / 3))
   const budget = store.quality === 'full' ? total : store.quality === 'balanced' ? 6000 : 3000
@@ -127,6 +130,7 @@ function vehicleSeriesData(limit: number) {
   const counts: [number, number, number] = [0, 0, 0]
   const on = STATUS_LAYER.map((key) => store.layers[key])
   const focusRoute = store.selectedRouteIndex
+  const coldOn = store.layers.cold
   for (let i = 0; i < total; i++) {
     const lng = flat[i * 3]!
     const lat = flat[i * 3 + 1]!
@@ -140,12 +144,26 @@ function vehicleSeriesData(limit: number) {
       continue
     }
     if (status === 0 && i % stride !== 0) continue
+    if (coldOn && status !== 2 && kindOf(code) === 1) { groups[4]!.push([lng, lat, i]); continue }
     groups[status]?.push([lng, lat, i])
   }
   if (total >= store.vehicleCount) statusCounts.value = counts
   return groups
 }
-const VEHICLE_SERIES_IDS = ['veh-0', 'veh-1', 'veh-2', 'veh-dim']
+const VEHICLE_SERIES_IDS = ['veh-0', 'veh-1', 'veh-2', 'veh-dim', 'veh-cold']
+
+/** 超温车辆标记：位置取当前车辆数组里该下标的坐标（回放时为历史位置，温度仍是实时） */
+function coldMarkData() {
+  if (!store.layers.cold || !store.cold) return []
+  const flat = activeFlat()
+  return store.cold.over.filter((o) => flat.length >= (o.index + 1) * 3 && inView(flat[o.index * 3]!, flat[o.index * 3 + 1]!))
+    .map((o) => ({ name: o.plate, value: [flat[o.index * 3]!, flat[o.index * 3 + 1]!], temp: o.temp, lo: o.lo, hi: o.hi, driver: o.driver,
+      itemStyle: { color: COLD, borderColor: o.alert ? RED : COLORS.canvas, borderWidth: o.alert ? 2 : 1 } }))
+}
+function coldTooltip(p: { data?: { name?: string; temp?: number; lo?: number; hi?: number; driver?: string } }) {
+  const d = p.data
+  return d ? `冷链超温 · ${d.name}<br/>当前 ${d.temp}℃，范围 ${d.lo}…${d.hi}℃ · ${d.driver}<br/>点击追踪并查看温度曲线` : ''
+}
 
 function renderVehicles(limit = Number.POSITIVE_INFINITY) {
   const c = chart.value
@@ -154,7 +172,7 @@ function renderVehicles(limit = Number.POSITIVE_INFINITY) {
   store.renderedVehicles = groups.reduce((sum, group) => sum + group.length, 0)
   // 增量更新：只替换三组车辆散点与追踪标记的数据，不重建整个 option
   c.setOption({
-    series: [...groups.map((data, s) => ({ id: VEHICLE_SERIES_IDS[s], data })), { id: 'vehicle-focus', data: vehicleFocusData() }, { id: 'vehicle-trail', data: trailData() }],
+    series: [...groups.map((data, s) => ({ id: VEHICLE_SERIES_IDS[s], data })), { id: 'vehicle-focus', data: vehicleFocusData() }, { id: 'vehicle-trail', data: trailData() }, { id: 'cold-marks', data: coldMarkData() }],
   })
 }
 
@@ -385,7 +403,7 @@ function hubTooltip(p: { data?: { name?: string; hubId?: string } }) {
 function vehicleTooltip(p: { seriesId?: string; data?: number[] }) {
   const index = p.data?.[2]
   const status = Number(p.seriesId?.split('-')[1])
-  return typeof index === 'number' ? `${plateOf(index)} · ${STATUS_TEXT[status] ?? ''}<br/>双击追踪该车（单击优先选中所在干线）` : ''
+  return typeof index === 'number' ? `${plateOf(index)} · ${p.seriesId === 'veh-cold' ? '冷链 · ' : ''}${STATUS_TEXT[status] ?? ''}<br/>双击追踪该车（单击优先选中所在干线）` : ''
 }
 
 function geoTooltip(p: { name: string }) {
@@ -453,6 +471,19 @@ function baseOption() {
         effect: { show: motion.value, period: 9, trailLength: 0.08, symbolSize: 2, color: COLORS.barLight },
         tooltip: { formatter: routeTooltip },
         data: linesData(),
+      },
+      {
+        // 冷链车辆：青色散点（异常状态仍走红色异常组）
+        id: 'veh-cold', type: 'scatter', coordinateSystem: 'geo', zlevel: 2,
+        symbolSize: 4, large: true, largeThreshold: 2000, progressive: 3000, progressiveThreshold: 6000,
+        itemStyle: { color: COLD, opacity: 0.9 }, emphasis: { disabled: true }, tooltip: { formatter: vehicleTooltip },
+        data: [] as [number, number, number][],
+      },
+      {
+        // 超温车辆标记：菱形，已告警的红边；点击追踪
+        id: 'cold-marks', type: 'scatter', coordinateSystem: 'geo', zlevel: 5, z: 4,
+        symbol: 'diamond', symbolSize: 12, emphasis: { scale: 1.3 }, tooltip: { formatter: coldTooltip },
+        data: coldMarkData(),
       },
       {
         // 选中干线之外的车辆：单色淡化，不参与悬停
@@ -707,6 +738,9 @@ watch(chart, (c) => {
     } else if (seriesId === 'hubs' || seriesId === 'hub-hit') {
       const hubId = (params.data as { hubId?: string })?.hubId
       if (hubId) { store.selectHub(hubId); consumed = true }
+    } else if (seriesId === 'cold-marks') {
+      const plate = (params.data as { name?: string })?.name
+      if (plate) { focusVehicle(plate); consumed = true }
     } else if (seriesId === 'alert-marks') {
       const event = store.events.find((item) => item.id === (params.data as { eventId?: number })?.eventId)
       if (event) { locateEvent(event); consumed = true }
@@ -828,6 +862,7 @@ watch(
             <b v-else-if="row.key === 'anomaly'">{{ fmtInt(statusCounts[2]) }}</b>
             <b v-else-if="row.key === 'routes'">{{ routesInView().length }} 条</b>
             <b v-else-if="row.key === 'alerts'">{{ alertOpenCount }} 起</b>
+            <b v-else-if="row.key === 'cold'">{{ store.cold ? `${fmtInt(store.cold.count)} · 超温 ${store.cold.overCount}` : '—' }}</b>
             <b v-else>{{ visibleHubs().length }} 个</b>
           </button>
         </li>
@@ -984,6 +1019,7 @@ watch(
 .dot.anomaly { background: var(--color-danger); }
 .dot.route { width: 12px; height: 2px; border-radius: 1px; background: var(--color-barLight); }
 .dot.hub { background: var(--color-secondary); border: 1px solid var(--color-heading); }
+.dot.cold { background: #3fd1c8; }
 .dot.alert { width: 0; height: 0; border-radius: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 9px solid var(--color-danger); background: none; }
 @media (max-width: 767px) {
   .map-legend { bottom: var(--space-2); left: var(--space-2); }
