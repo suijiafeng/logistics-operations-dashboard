@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useDashboardStore } from '../stores/dashboard'
+import { useFocus } from '../services/useFocus'
 import { HIGH_UTILIZATION } from '../design/tokens'
 import { ROUTES, hubById, GUANGDONG_HUB_IDS } from '../data/network'
 import { fmtCompact, fmtInt } from '../services/format'
@@ -8,6 +9,7 @@ import { fmtCompact, fmtInt } from '../services/format'
 const BACKLOG_WARN = 650
 const LEVEL_TEXT = ['', '一级枢纽', '二级枢纽', '三级网点']
 const store = useDashboardStore()
+const { focusHub, locateEvent } = useFocus()
 const hub = computed(() => store.selectedHub)
 const relatedEvents = computed(() => store.events.filter((event) => hub.value &&
   (event.fromId === hub.value.id || event.toId === hub.value.id || event.place.includes(hub.value.name))).slice(0, 3))
@@ -40,7 +42,7 @@ const util = computed(() => Math.max(0, Math.min(100, hub.value?.utilization ?? 
 const LEVEL_DOT = ['lv0', 'lv1', 'lv2']
 
 function jump(id: string) {
-  store.selectHub(id)
+  focusHub(id)
   store.notify(`已切换：${hubById[id].name}网点`)
 }
 </script>
@@ -82,7 +84,7 @@ function jump(id: string) {
 
     <section v-if="relatedEvents.length" class="block">
       <h5>相关告警 · {{ relatedEvents.length }}</h5>
-      <button v-for="event in relatedEvents" :key="event.id" class="event-link" :title="`${event.type} · ${event.place} · ${event.desc}`" @click="store.locateEvent(event)">
+      <button v-for="event in relatedEvents" :key="event.id" class="event-link" :title="`${event.type} · ${event.place} · ${event.desc}`" @click="locateEvent(event)">
         <i class="sev" :class="LEVEL_DOT[event.level] ?? 'lv0'" />
         <span class="ev-main"><b>{{ event.type }}</b><span>{{ event.place }}</span></span>
         <time>{{ event.time }}</time>

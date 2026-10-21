@@ -3,8 +3,10 @@ import { computed } from 'vue'
 import Panel from './Panel.vue'
 import RankRow from './RankRow.vue'
 import { useDashboardStore } from '../stores/dashboard'
+import { useFocus } from '../services/useFocus'
 
 const store = useDashboardStore()
+const { focusHub } = useFocus()
 const total = (h: { arrivals?: number; departures?: number }) => (h.arrivals ?? 0) + (h.departures ?? 0)
 const max = computed(() => Math.max(1, ...store.topHubs.map(total)))
 </script>
@@ -16,7 +18,7 @@ const max = computed(() => Math.max(1, ...store.topHubs.map(total)))
         <RankRow :rank="i + 1" :name="h.name" :value="total(h)" :max="max"
           class="interactive-row" :class="{ selected: h.id === store.selectedHubId }"
           role="button" tabindex="0" :aria-pressed="h.id === store.selectedHubId"
-          @click="store.selectHub(h.id)" @keydown.enter="store.selectHub(h.id)" @keydown.space.prevent="store.selectHub(h.id)" />
+          @click="focusHub(h.id)" @keydown.enter="focusHub(h.id)" @keydown.space.prevent="focusHub(h.id)" />
       </li>
     </ul>
   </Panel>

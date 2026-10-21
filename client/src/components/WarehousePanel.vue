@@ -2,11 +2,13 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import Panel from './Panel.vue'
 import { useDashboardStore } from '../stores/dashboard'
+import { useFocus } from '../services/useFocus'
 import { GUANGDONG_HUB_IDS } from '../data/network'
 import { HIGH_UTILIZATION } from '../design/tokens'
 import { fmtInt } from '../services/format'
 
 const store = useDashboardStore()
+const { focusHub } = useFocus()
 // 使用行政归属，避免包围盒把外省网点误纳入；按利用率降序，版面放不下时隐藏利用率最低的
 const gdHubs = computed(() =>
   store.hubs
@@ -44,7 +46,7 @@ onBeforeUnmount(() => observer?.disconnect())
         role="button" tabindex="0" :aria-pressed="h.id === store.selectedHubId"
         :title="`${h.name} · 利用率 ${h.utilization ?? 0}% · 积压 ${fmtInt(h.backlog)} 件`"
         :aria-label="`${h.name}，利用率 ${h.utilization ?? 0}%，${(h.utilization ?? 0) >= HIGH_UTILIZATION ? '高负载' : '正常'}，积压 ${h.backlog ?? 0} 件`"
-        @click="store.selectHub(h.id)" @keydown.enter="store.selectHub(h.id)" @keydown.space.prevent="store.selectHub(h.id)">
+        @click="focusHub(h.id)" @keydown.enter="focusHub(h.id)" @keydown.space.prevent="focusHub(h.id)">
         <div class="body">
           <div class="top">
             <span class="name">{{ h.name }}</span>
