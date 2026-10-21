@@ -7,13 +7,13 @@ export const COLORS = {
   success: '#34c77b', warning: '#e8b13c', danger: '#f0524d', dangerText: '#ff9d97',
   muted: '#5b7a99', route: '#5b7a99',
   infoBg: '#233242', warningBg: '#4a3a17', dangerBg: '#57201d',
-  mapArea: '#101a24', mapBorder: '#2a3d51', mapProvince: '#14202c', mapHover: '#293423',
+  mapArea: '#101a24', mapBorder: '#2a3d51', mapProvince: '#14202c', mapHover: '#49301f',
   overlay: 'rgba(13, 20, 27, 0.96)', hud: 'rgba(8, 12, 16, 0.92)',
   legend: 'rgba(10, 15, 20, 0.82)', accentArea: 'rgba(255, 138, 61, 0.13)',
 } as const
 
 export const FONT = {
-  family: '"Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", sans-serif',
+  family: '"Noto Sans CJK SC", "Noto Sans SC", "Source Han Sans SC", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif',
   small: 12, body: 14, title: 16, compactPage: 20, page: 24, kpi: 36,
 } as const
 

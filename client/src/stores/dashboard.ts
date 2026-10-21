@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import type { Hub } from '../data/network'
-import { HUBS } from '../data/network'
+import { HUBS, GUANGDONG_HUB_IDS } from '../data/network'
 
 export interface Kpi {
   enRoute: number
@@ -17,14 +17,23 @@ export interface AnomalyEvent {
   place: string
   desc: string
   level: number // 0 普通 1 警告 2 严重
+  fromId?: string
+  toId?: string
+  routeIndex?: number
+  position?: [number, number]
 }
 
 export interface NameValue {
+  id?: string
+  fromId?: string
+  toId?: string
   name: string
   value: number
 }
 
 export interface SnapshotMsg {
+  engineId?: string
+  events?: AnomalyEvent[]
   type: 'snapshot'
   ts: number
   vehicleCount: number
@@ -38,6 +47,7 @@ export interface SnapshotMsg {
 }
 
 export interface DeltaMsg {
+  engineId?: string
   type: 'delta'
   ts: number
   vehicles: number[]
@@ -57,6 +67,7 @@ export const useDashboardStore = defineStore('dashboard', {
     connectionError: '',
     reconnectAttempt: 0,
     dataAt: 0,
+    engineId: '',
     receivedAt: 0,
     checkedAt: Date.now(),
     vehicleCount: 0,
@@ -74,9 +85,26 @@ export const useDashboardStore = defineStore('dashboard', {
     routeVolumes: [] as NameValue[],
     events: [] as AnomalyEvent[],
     selectedHubId: null as string | null,
+    activeEvent: null as AnomalyEvent | null,
+    detailSide: 'right' as 'left' | 'right',
+    notice: '',
+    noticeAt: 0,
     view: 'china' as 'china' | 'guangdong',
     hudOn: false,
     decorationsOn: true,
+    tourOn: false,
+    tourPaused: false,
+    kioskOn: false,
+    cursorHidden: false,
+    fullscreen: false,
+    wakeStatus: '',
+    quality: 'full' as 'full' | 'balanced' | 'low',
+    qualityReason: '',
+    autoQuality: true,
+    fps: 0,
+    frameMs: 0,
+    renderedVehicles: 0,
+    renderDpr: 1,
     lastDeltaKB: 0,
     lastDeltaAt: 0,
     latencyMs: 0,
@@ -99,6 +127,7 @@ export const useDashboardStore = defineStore('dashboard', {
   },
   actions: {
     applySnapshot(msg: SnapshotMsg) {
+      this.syncEngine(msg.engineId)
       this.receivedAt = this.checkedAt = Date.now()
       this.connectionError = ''
       this.dataAt = msg.ts
@@ -110,10 +139,12 @@ export const useDashboardStore = defineStore('dashboard', {
       this.modes = msg.modes
       this.punctuality = msg.punctuality
       this.routeVolumes = msg.routeVolumes
+      if (msg.events) this.mergeEvents(msg.events)
       this.mapVersion++
       this.chartVersion++
     },
     applyDelta(msg: DeltaMsg, payloadKB: number) {
+      this.syncEngine(msg.engineId)
       this.receivedAt = this.checkedAt = Date.now()
       this.connectionError = ''
       this.dataAt = msg.ts
@@ -129,9 +160,7 @@ export const useDashboardStore = defineStore('dashboard', {
       this.modes = msg.modes
       this.punctuality = msg.punctuality
       this.routeVolumes = msg.routeVolumes
-      if (msg.events.length) {
-        this.events = [...[...msg.events].reverse(), ...this.events].slice(0, 30)
-      }
+      this.mergeEvents(msg.events)
       this.lastDeltaKB = payloadKB
       this.latencyMs = Math.max(0, Date.now() - msg.ts)
       this.lastDeltaAt = Date.now()
@@ -140,7 +169,40 @@ export const useDashboardStore = defineStore('dashboard', {
       this.chartVersion++
     },
     selectHub(id: string | null) {
+      this.activeEvent = null
       this.selectedHubId = id
+      if (id && this.view === 'guangdong' && !GUANGDONG_HUB_IDS.has(id)) {
+        this.setView('china')
+        this.notify('已切换全国视图定位该网点')
+      }
+    },
+    syncEngine(id?: string) {
+      if (id && id !== this.engineId) {
+        this.events = []
+        this.activeEvent = null
+        this.selectedHubId = null
+        this.engineId = id
+      }
+    },
+    mergeEvents(events: AnomalyEvent[]) {
+      const all = new Map([...this.events, ...events].map((event) => [event.id, event]))
+      this.events = [...all.values()].sort((a, b) => b.id - a.id).slice(0, 60)
+    },
+    notify(message: string) { this.notice = message; this.noticeAt = Date.now() },
+    locateEvent(event: AnomalyEvent) {
+      const names = event.place.split('→').map((name) => name.trim())
+      const fromId = event.fromId ?? this.hubs.find((hub) => hub.name === names[0])?.id
+      const toId = event.toId ?? this.hubs.find((hub) => hub.name === names[names.length - 1])?.id
+      this.activeEvent = { ...event, fromId, toId }
+      // 跨省事件保留全国地图，才能同时展示起终点和事件位置。
+      this.setView(fromId && toId && GUANGDONG_HUB_IDS.has(fromId) && GUANGDONG_HUB_IDS.has(toId) ? 'guangdong' : 'china')
+      this.selectedHubId = toId ?? null
+      this.notify(`已定位：${event.place} · ${this.view === 'china' ? '全国' : '广东'}视图`)
+    },
+    clearSelection() { this.selectedHubId = null; this.activeEvent = null },
+    escape() {
+      if (this.selectedHubId || this.activeEvent) this.clearSelection()
+      else if (this.view === 'guangdong') this.setView('china')
     },
     setView(v: 'china' | 'guangdong') {
       this.view = v

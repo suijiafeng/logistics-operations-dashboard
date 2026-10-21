@@ -8,15 +8,15 @@ const max = computed(() => Math.max(1, store.routeVolumes[0]?.value ?? 0))
 </script>
 
 <template>
-  <Panel title="干线运量排行" extra="今日单量 · TOP8">
-    <div class="grid">
-      <div v-for="(r, i) in store.routeVolumes" :key="r.name" class="item">
+  <Panel title="全国干线运量排行" extra="今日累计 · TOP8">
+    <TransitionGroup name="rank" tag="div" class="grid">
+      <div v-for="(r, i) in store.routeVolumes" :key="r.id ?? r.name" class="item">
         <span class="rank">{{ i + 1 }}</span>
         <span class="name">{{ r.name }}</span>
         <span class="bar"><span class="fill" :style="{ width: `${(r.value / max) * 100}%` }" /></span>
         <span class="val">{{ r.value.toLocaleString('zh-CN') }}</span>
       </div>
-    </div>
+    </TransitionGroup>
   </Panel>
 </template>
 
@@ -36,6 +36,7 @@ const max = computed(() => Math.max(1, store.routeVolumes[0]?.value ?? 0))
   align-items: center;
   gap: var(--space-2);
 }
+.rank-move { transition: transform 0.5s ease; }
 .rank {
   width: 18px;
   height: 18px;

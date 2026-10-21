@@ -11,6 +11,8 @@ export interface Hub {
   backlog?: number
   utilization?: number
   onTime?: number
+  recentOrders?: number[]
+  recentLabels?: string[]
 }
 
 export const HUBS: Hub[] = [
