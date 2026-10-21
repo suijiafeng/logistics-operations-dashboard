@@ -6,6 +6,7 @@ import { COLORS, FONT } from '../design/tokens'
 import { useChartMotion } from '../services/useChartMotion'
 import { useMediaQuery } from '../services/useMediaQuery'
 import { useDashboardStore } from '../stores/dashboard'
+import { fmtInt } from '../services/format'
 import { HUBS, ROUTES, hubById } from '../data/network'
 import chinaGeo from '../assets/geo/china.json'
 
@@ -24,10 +25,12 @@ let transitionTimer: number | undefined
 let buildVersion = 0
 let disposed = false
 const switching = ref(false)
+// 图例计数：统计当前视图内全部车辆（不受画质抽稀影响）
+const statusCounts = ref<[number, number, number]>([0, 0, 0])
 const mapError = ref('')
 let fedCount = 0 // 首屏分片渐进：已喂入的车辆数
 
-const STATUS_COLORS = [COLORS.accentText, COLORS.muted, RED] // 在途 / 装卸 / 异常
+const STATUS_COLORS = [COLORS.vehicle, COLORS.bar, RED] // 在途 / 装卸 / 异常
 const STATUS_SIZES = [4, 4, 6]
 
 function inView(lng: number, lat: number) {
@@ -46,14 +49,17 @@ function vehicleSeriesData(limit: number) {
   const total = Math.min(limit, store.vehicleCount, Math.floor(flat.length / 3))
   const budget = store.quality === 'full' ? total : store.quality === 'balanced' ? 6000 : 3000
   const stride = Math.max(1, Math.ceil(total / budget))
+  const counts: [number, number, number] = [0, 0, 0]
   for (let i = 0; i < total; i++) {
     const lng = flat[i * 3]
     const lat = flat[i * 3 + 1]
     const status = flat[i * 3 + 2]
-    if (status === 0 && i % stride !== 0) continue
     if (!inView(lng, lat)) continue
+    if (status >= 0 && status <= 2) counts[status]++
+    if (status === 0 && i % stride !== 0) continue
     groups[status]?.push([lng, lat])
   }
+  if (total >= store.vehicleCount) statusCounts.value = counts
   return groups
 }
 
@@ -98,12 +104,13 @@ function hubData() {
     return {
       name: h.name, hubId: h.id, level: h.level, value: [h.lng, h.lat],
       symbolSize: selected ? 18 : h.level === 1 ? 13 : h.level === 2 ? 10 : 8,
-      itemStyle: { color: selected ? COLORS.accentValue : ACCENT, borderColor: selected ? ACCENT : 'transparent', borderWidth: 2 },
+      itemStyle: { color: selected ? ACCENT : COLORS.secondary, borderColor: selected ? COLORS.accentValue : COLORS.canvas, borderWidth: selected ? 2 : 1 },
       label: {
         show: store.view === 'guangdong' || h.level === 1 || selected,
         position: h.id === 'fs' || h.id === 'zh' ? 'left' : h.id === 'dg' || h.id === 'gz' ? 'top' : 'right',
         offset: h.id === 'fs' ? [-8, 12] : h.id === 'gz' ? [-8, -16] : h.id === 'dg' ? [16, -8] : [0, 0],
-        color: selected ? COLORS.accentValue : COLORS.text,
+        color: selected ? COLORS.heading : h.level === 1 ? COLORS.text : COLORS.secondary,
+        fontWeight: selected ? 600 : 400,
       },
     }
   })
@@ -196,8 +203,8 @@ function baseOption() {
         zlevel: 1,
         polyline: true,
         silent: true,
-        lineStyle: { color: COLORS.route, width: 1, opacity: 0.55 },
-        effect: { show: motion.value, period: 9, trailLength: 0.08, symbolSize: 2, color: COLORS.accentText },
+        lineStyle: { color: COLORS.route, width: 1.2, opacity: 0.9 },
+        effect: { show: motion.value, period: 9, trailLength: 0.08, symbolSize: 2, color: COLORS.barLight },
         data: lines,
       },
       ...[0, 1, 2].map((s) => ({
@@ -210,7 +217,7 @@ function baseOption() {
         largeThreshold: 2000,
         progressive: 3000,
         progressiveThreshold: 6000,
-        itemStyle: { color: STATUS_COLORS[s], opacity: s === 0 ? 0.9 : 0.95 },
+        itemStyle: { color: STATUS_COLORS[s], opacity: s === 0 ? 0.8 : 0.95 },
         data: [] as [number, number][],
         silent: true,
       })),
@@ -222,7 +229,7 @@ function baseOption() {
         rippleEffect: { brushType: 'stroke', scale: 2.6 },
         symbolSize: (val: unknown, params: { data?: { level?: number } }) =>
           params.data?.level === 1 ? 13 : params.data?.level === 2 ? 10 : 8,
-        itemStyle: { color: ACCENT },
+        itemStyle: { color: COLORS.secondary },
         label: {
           show: true,
           formatter: (p: { data?: { name?: string } }) => p.data?.name ?? '',
@@ -345,15 +352,25 @@ watch(
 <template>
   <div class="map-wrap">
     <div ref="el" class="map-chart" :class="{ switching }" />
+    <nav class="crumb" aria-label="地图范围">
+      <template v-if="store.view === 'guangdong'">
+        <button class="crumb-link" @click="store.clearSelection(); store.setView('china')">全国</button>
+        <span class="sep">›</span><b>广东省</b>
+      </template>
+      <template v-else>
+        <b>全国</b><span class="sep">›</span><span class="hint">点击广东省下钻</span>
+      </template>
+    </nav>
     <p v-if="!store.hasData" class="map-loading">{{ store.dataStatus === 'error' ? '车辆数据暂不可用' : '正在加载车辆数据…' }}</p>
     <p v-if="mapError" class="map-error" role="alert">{{ mapError }}</p>
-    <div class="map-legend">
-      <span><i class="dot enroute" />在途</span>
-      <span><i class="dot dwell" />装卸</span>
-      <span><i class="dot anomaly" />异常</span>
-      <span class="hint">{{ store.view === 'china' ? '点击广东省下钻 · 点击网点看详情' : '广东省内网点与车辆' }}</span>
+    <div v-if="store.hasData" class="map-legend">
+      <p class="legend-title">车辆状态 · {{ store.view === 'guangdong' ? '广东省内' : '共' }} {{ fmtInt(statusCounts[0] + statusCounts[1] + statusCounts[2]) }} 台</p>
+      <dl>
+        <div><dt><i class="dot enroute" />在途</dt><dd>{{ fmtInt(statusCounts[0]) }}</dd></div>
+        <div><dt><i class="dot dwell" />装卸</dt><dd>{{ fmtInt(statusCounts[1]) }}</dd></div>
+        <div><dt><i class="dot anomaly" />异常</dt><dd>{{ fmtInt(statusCounts[2]) }}</dd></div>
+      </dl>
     </div>
-    <button v-if="store.view === 'guangdong'" class="back-btn" @click="store.clearSelection(); store.setView('china')">返回全国</button>
     <slot />
   </div>
 </template>
@@ -363,7 +380,8 @@ watch(
   position: relative;
   flex: 1;
   min-height: 0;
-  background: var(--color-panel);
+  background: radial-gradient(ellipse at 50% 45%, #0d2142 0%, var(--color-panel) 70%);
+  border: 1px solid var(--color-track);
   border-radius: var(--radius-panel);
   overflow: hidden;
 }
@@ -374,50 +392,71 @@ watch(
   touch-action: none;
 }
 .map-chart.switching { opacity: 0.25; }
-.map-loading { position: absolute; top: var(--space-4); left: var(--space-4); padding: var(--space-2); color: var(--color-secondary); background: var(--color-panel); }
-.map-error { position: absolute; top: 16px; left: 150px; color: var(--color-dangerText); font-size: var(--font-body); }
+.crumb {
+  position: absolute;
+  top: var(--space-3);
+  left: var(--space-4);
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  max-width: calc(100% - 32px);
+  white-space: nowrap;
+  z-index: 3;
+}
+.crumb b { font-size: 18px; font-weight: 700; color: var(--color-heading); }
+.crumb .sep { color: var(--color-tertiary); }
+.crumb .hint { font-size: 13px; color: var(--color-tertiary); overflow: hidden; text-overflow: ellipsis; }
+.crumb-link {
+  min-height: 0;
+  min-width: 0;
+  padding: 0 2px;
+  background: none;
+  border: 0;
+  color: var(--color-tertiary);
+  font-size: var(--font-body);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.crumb-link:hover { color: var(--color-heading); }
+.map-loading { position: absolute; top: 52px; left: var(--space-4); padding: var(--space-2); color: var(--color-secondary); background: var(--color-panel); }
+.map-error { position: absolute; top: 52px; left: var(--space-4); color: var(--color-dangerText); font-size: var(--font-body); }
 .map-legend {
   position: absolute;
-  left: 14px;
-  bottom: 12px;
-  display: flex;
-  gap: var(--space-4);
-  align-items: center;
-  font-size: var(--font-small);
-  color: var(--color-secondary);
+  left: var(--space-4);
+  bottom: var(--space-4);
+  min-width: 176px;
+  max-width: calc(100% - 32px);
+  padding: 10px 12px;
   background: var(--color-legend);
-  padding: var(--space-1) var(--space-2);
-  border-radius: var(--radius-control);
+  border: 1px solid var(--color-track);
+  border-radius: var(--radius-panel);
+  font-size: var(--font-small);
+  z-index: 3;
+}
+.legend-title { color: var(--color-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 6px; }
+.map-legend dl { display: grid; gap: 4px; }
+.map-legend dl > div { display: flex; align-items: center; gap: var(--space-4); }
+.map-legend dt { display: flex; align-items: center; color: var(--color-secondary); }
+.map-legend dd {
+  margin-left: auto;
+  font-family: var(--font-number);
+  font-weight: 600;
+  color: var(--color-heading);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .map-legend .dot {
   display: inline-block;
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  margin-right: var(--space-1);
+  margin-right: var(--space-2);
 }
-.dot.enroute { background: var(--color-accentText); }
-.dot.dwell { background: var(--color-muted); }
+.dot.enroute { background: var(--color-vehicle); }
+.dot.dwell { background: var(--color-bar); }
 .dot.anomaly { background: var(--color-danger); }
-.map-legend .hint {
-  color: var(--color-secondary);
-}
-.back-btn {
-  position: absolute;
-  top: 12px;
-  left: 14px;
-  background: var(--color-accent);
-  color: var(--color-onAccent);
-  border: none;
-  border-radius: var(--radius-control);
-  padding: var(--space-1) var(--space-4);
-  font-size: var(--font-body);
-  font-weight: 600;
-  cursor: pointer;
-}
-.back-btn:hover { background: var(--color-accentText); }
 @media (max-width: 767px) {
-  .map-legend { right: var(--space-4); flex-wrap: wrap; gap: var(--space-2); }
-  .map-legend .hint { flex-basis: 100%; }
+  .map-legend { bottom: var(--space-2); left: var(--space-2); }
 }
 </style>

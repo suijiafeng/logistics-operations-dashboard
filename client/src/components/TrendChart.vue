@@ -1,63 +1,63 @@
 <script setup lang="ts">
-import { watch } from 'vue'
+import { computed, watch } from 'vue'
 import Panel from './Panel.vue'
-import { useEcharts, TEXT, ACCENT, TOOLTIP } from '../services/useEcharts'
-import { COLORS } from '../design/tokens'
+import { useEcharts, TEXT, TOOLTIP } from '../services/useEcharts'
+import { COLORS, FONT } from '../design/tokens'
 import { formatTrendTooltip } from '../services/formatTrendTooltip'
 import { useDashboardStore } from '../stores/dashboard'
 
 const store = useDashboardStore()
 const { el, chart } = useEcharts()
 
+function beijingHour(ts: number) {
+  return Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Shanghai', hour: '2-digit', hourCycle: 'h23' }).format(new Date(ts)))
+}
+const asOf = computed(() => store.dataAt
+  ? new Date(store.dataAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Shanghai' })
+  : '')
+
+// 已完成小时：实心柱；当前小时：虚线框半透明柱（累计中）；未来小时不画
 function render() {
   const c = chart.value
   if (!c || store.trend.length === 0) return
-  const hours = store.trend.map((_, h) => `${String(h).padStart(2, '0')}:00`)
-  const currentHour = Number(new Intl.DateTimeFormat('en-GB', {
-    timeZone: 'Asia/Shanghai', hour: '2-digit', hourCycle: 'h23',
-  }).format(new Date(store.dataAt || Date.now())))
-  const completed = store.trend.map((value, h) => h < currentHour ? value : null)
-  const partial = store.trend.map((value, h) => h === currentHour || h === currentHour - 1 ? value : null)
+  const currentHour = beijingHour(store.dataAt || Date.now())
+  const hours = store.trend.map((_, h) => String(h).padStart(2, '0'))
   c.setOption({
-    grid: { left: 8, right: 12, top: 22, bottom: 2, containLabel: true },
+    grid: { left: 0, right: 4, top: 8, bottom: 0, containLabel: true },
     tooltip: {
       ...TOOLTIP,
       trigger: 'axis',
+      axisPointer: { type: 'shadow', shadowStyle: { color: 'rgba(91, 166, 238, 0.08)' } },
       formatter: (params: unknown) => formatTrendTooltip(params, store.trend, currentHour),
     },
     xAxis: {
       type: 'category',
       data: hours,
-      boundaryGap: false,
       axisLine: { lineStyle: { color: COLORS.border } },
       axisTick: { show: false },
-      axisLabel: { ...TEXT, interval: 3 },
+      axisLabel: { ...TEXT, fontFamily: FONT.number, interval: (i: number) => i % 6 === 0 },
     },
     yAxis: {
       type: 'value',
+      splitNumber: 3,
       splitLine: { lineStyle: { color: COLORS.track } },
-      axisLabel: { ...TEXT, formatter: (v: number) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : `${v}`) },
+      axisLabel: { ...TEXT, fontFamily: FONT.number, formatter: (v: number) => (v >= 1000 ? `${+(v / 1000).toFixed(1)}k` : `${v}`) },
     },
     series: [
       {
-        name: '运单量',
-        type: 'line',
-        smooth: false,
-        symbol: 'none',
-        lineStyle: { color: ACCENT, width: 2 },
-        areaStyle: { color: COLORS.accentArea },
-        data: completed,
+        name: '已完成小时',
+        type: 'bar',
+        barWidth: '62%',
+        itemStyle: { color: COLORS.barStrong, borderRadius: [2, 2, 0, 0] },
+        data: store.trend.map((value, h) => (h < currentHour ? value : null)),
       },
       {
         name: '当前小时（累计中）',
-        type: 'line',
-        smooth: false,
-        connectNulls: false,
-        symbol: 'circle',
-        symbolSize: 5,
-        itemStyle: { color: ACCENT, opacity: 0.65 },
-        lineStyle: { color: ACCENT, type: 'dashed', width: 2, opacity: 0.65 },
-        data: partial,
+        type: 'bar',
+        barWidth: '62%',
+        barGap: '-100%',
+        itemStyle: { color: COLORS.accentArea, borderColor: COLORS.accent, borderWidth: 1, borderType: 'dashed', borderRadius: [2, 2, 0, 0] },
+        data: store.trend.map((value, h) => (h === currentHour ? value : null)),
       },
     ],
   })
@@ -67,8 +67,8 @@ watch([chart, () => store.chartVersion], render)
 </script>
 
 <template>
-  <Panel title="今日分时运单" extra="北京时间 · 虚线累计中">
-    <div ref="el" class="chart" />
+  <Panel title="今日分时运单" :extra="asOf ? `北京时间 · 截至 ${asOf}` : '北京时间'">
+    <div ref="el" class="chart" role="img" aria-label="今日各小时运单量柱状图，橙色虚线柱为当前小时累计中" />
   </Panel>
 </template>
 
