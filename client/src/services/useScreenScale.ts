@@ -15,7 +15,9 @@ const MAX_SCALE = 2
  */
 export function useScreenScale() {
   const store = useDashboardStore()
-  const disabled = new URLSearchParams(location.search).get('scale') === 'off'
+  const params = new URLSearchParams(location.search)
+  const disabled = params.get('scale') === 'off'
+  const contain = params.get('fit') === 'contain'
   const style = ref<Record<string, string>>({})
 
   function compute() {
@@ -25,7 +27,8 @@ export function useScreenScale() {
     // 缩放子树里 vw/vh 也会被 zoom 再乘一次，所以把逻辑视口尺寸以 px 下发给 --vw / --vh
     style.value = store.screenScale === 1 ? {} : {
       zoom: String(store.screenScale),
-      '--vw': `${w / store.screenScale / 100}px`,
+      // fit=contain 内容宽封顶 1920 逻辑像素，--vw 同口径
+      '--vw': `${Math.min(w / store.screenScale, contain ? BASE_W : Infinity) / 100}px`,
       '--vh': `${h / store.screenScale / 100}px`,
     }
   }

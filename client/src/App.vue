@@ -24,7 +24,8 @@ const scaleStyle = useScreenScale()
 const fit = new URLSearchParams(location.search).get('fit') || 'fill'
 const seamValues = (new URLSearchParams(location.search).get('seams') || '').split(',').map(Number).filter(n => n > 0 && n < 100).sort((a,b) => a-b)
 // 两条拼缝将三屏分成三个独立安全区；不以遮罩盖住文字。--vw 为逻辑视口宽的 1%，放大后拼缝仍落在物理屏的同一百分比处。
-const seamLayout = seamValues.length === 2 && seamValues[0]! >= 20 && seamValues[1]! <= 80 && seamValues[1]! - seamValues[0]! >= 20
+// fit=contain 把内容收在 1920 逻辑宽内，不跨物理拼缝，因此不启用拼缝安全区
+const seamLayout = fit !== 'contain' && seamValues.length === 2 && seamValues[0]! >= 20 && seamValues[1]! <= 80 && seamValues[1]! - seamValues[0]! >= 20
   ? { '--seam-left': `calc(${seamValues[0]} * var(--vw) - 28px)`, '--seam-center': `calc(${seamValues[1]! - seamValues[0]!} * var(--vw) - 24px)`, '--seam-right': `calc(${100-seamValues[1]!} * var(--vw) - 28px)` }
   : undefined
 let freshnessTimer: number | undefined
@@ -143,6 +144,8 @@ button:focus-visible, [role='button']:focus-visible {
 .cursor-hidden, .cursor-hidden :deep(*) { cursor: none !important; }
 .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); max-width: calc(var(--vw) * 100 - 32px); padding: 12px 20px; background: var(--color-panel); border: 1px solid var(--color-accent); border-radius: 8px; z-index: 200; }
 .fit-contain .screen { max-width: 1920px; margin-inline: auto; }
+/* contain 内容宽不超过 1920：组件里的 --vw 也封顶在 19.2px（放大模式由 useScreenScale 按同样口径下发） */
+.fit-contain { --vw: min(1vw, 19.2px); }
 .fit-width .screen { height: auto; }
 .screen {
   width: 100%;
@@ -192,10 +195,11 @@ button:focus-visible, [role='button']:focus-visible {
   .middle > * { contain: size; }
   .left { grid-template-rows: auto minmax(150px, 1fr) 176px; }
 }
-/* 放大模式下逻辑高度为 1080，逻辑宽 ≥ 2400 等价于宽高比 ≥ 20/9（媒体查询只看物理 CSS 尺寸） */
+/* 放大模式下逻辑高度为 1080，逻辑宽 ≥ 2400 等价于宽高比 ≥ 20/9（媒体查询只看物理 CSS 尺寸）。
+   宽屏规则都排除 fit-contain：媒体查询看的是视口，而 contain 的内容宽固定 ≤1920，应沿用 1920 布局 */
 @media (min-width: 2400px) and (max-height: 1080px), (min-height: 1081px) and (min-aspect-ratio: 20/9) {
-  .middle { grid-template-columns: 520px minmax(0, 1fr) 520px; }
-  .bottom { grid-template-columns: minmax(0, 1fr) 800px; }
+  .viewport:not(.fit-contain) .middle { grid-template-columns: 520px minmax(0, 1fr) 520px; }
+  .viewport:not(.fit-contain) .bottom { grid-template-columns: minmax(0, 1fr) 800px; }
 }
 @media (max-width: 1279px) {
   .screen { height: auto; grid-template-rows: auto auto auto; }
@@ -218,15 +222,15 @@ button:focus-visible, [role='button']:focus-visible {
   .bottom { min-height: 520px; grid-template-rows: 320px 200px; }
 }
 @media (min-aspect-ratio: 5/2) and (min-width: 2000px) {
-  .middle { grid-template-columns: minmax(560px, 1fr) minmax(700px, 2fr) minmax(640px, 1fr); }
-  .left, .right { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); }
-  .left > :first-child, .right > :first-child { grid-column: 1 / -1; }
-  .left { grid-template-rows: auto minmax(0, 1fr); }
-  .right { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+  .viewport:not(.fit-contain) .middle { grid-template-columns: minmax(560px, 1fr) minmax(700px, 2fr) minmax(640px, 1fr); }
+  .viewport:not(.fit-contain) .left, .viewport:not(.fit-contain) .right { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(2, minmax(0, 1fr)); }
+  .viewport:not(.fit-contain) .left > :first-child, .viewport:not(.fit-contain) .right > :first-child { grid-column: 1 / -1; }
+  .viewport:not(.fit-contain) .left { grid-template-rows: auto minmax(0, 1fr); }
+  .viewport:not(.fit-contain) .right { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
 }
 @media (min-width: 2000px) and (max-height: 1080px), (min-height: 1081px) and (min-aspect-ratio: 50/27) {
-  .seam-safe .middle { grid-template-columns: var(--seam-left) var(--seam-center) var(--seam-right); gap: 24px; }
-  .seam-safe :deep(.topbar) { grid-template-columns: var(--seam-left) var(--seam-center) var(--seam-right); gap: 24px; padding-inline: 0; }
-  .seam-safe .bottom { margin-left: calc(var(--seam-left) + 24px); margin-right: calc(var(--seam-right) + 24px); }
+  .viewport:not(.fit-contain) .seam-safe .middle { grid-template-columns: var(--seam-left) var(--seam-center) var(--seam-right); gap: 24px; }
+  .viewport:not(.fit-contain) .seam-safe :deep(.topbar) { grid-template-columns: var(--seam-left) var(--seam-center) var(--seam-right); gap: 24px; padding-inline: 0; }
+  .viewport:not(.fit-contain) .seam-safe .bottom { margin-left: calc(var(--seam-left) + 24px); margin-right: calc(var(--seam-right) + 24px); }
 }
 </style>
