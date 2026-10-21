@@ -41,6 +41,7 @@ export interface SnapshotMsg {
   hubs: Hub[]
   kpi: Kpi
   trend: (number | null)[]
+  trendYesterday?: number[]
   modes: NameValue[]
   punctuality: NameValue[]
   routeVolumes: NameValue[]
@@ -54,6 +55,7 @@ export interface DeltaMsg {
   hubs: { id: string }[]
   kpi: Kpi
   trend: (number | null)[]
+  trendYesterday?: number[]
   modes: NameValue[]
   punctuality: NameValue[]
   routeVolumes: NameValue[]
@@ -80,6 +82,8 @@ export const useDashboardStore = defineStore('dashboard', {
     hubs: HUBS.map((h) => ({ ...h })) as Hub[],
     kpi: { enRoute: 0, ordersToday: 0, onTimeRate: 0, pendingAnomalies: 0 } as Kpi,
     trend: [] as (number | null)[],
+    // 昨日各小时运单（引擎按同一确定性规则生成，用作分时图的同期参考）
+    trendYesterday: [] as number[],
     modes: [] as NameValue[],
     punctuality: [] as NameValue[],
     routeVolumes: [] as NameValue[],
@@ -138,6 +142,7 @@ export const useDashboardStore = defineStore('dashboard', {
       this.hubs = msg.hubs
       this.kpi = msg.kpi
       this.trend = msg.trend
+      if (msg.trendYesterday) this.trendYesterday = msg.trendYesterday
       this.modes = msg.modes
       this.punctuality = msg.punctuality
       this.routeVolumes = msg.routeVolumes
@@ -159,6 +164,7 @@ export const useDashboardStore = defineStore('dashboard', {
       }
       this.kpi = msg.kpi
       this.trend = msg.trend
+      if (msg.trendYesterday) this.trendYesterday = msg.trendYesterday
       this.modes = msg.modes
       this.punctuality = msg.punctuality
       this.routeVolumes = msg.routeVolumes

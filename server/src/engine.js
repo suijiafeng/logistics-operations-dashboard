@@ -3,7 +3,7 @@
 // 内部步进 250ms，聚合 1s 后批量推送 delta；车辆位置用扁平数组编码（[lng, lat, status] * N），不用对象数组，减小包体。
 
 import { HUBS, ROUTES, hubById, pointOnRoute, routeLengthDeg } from './network.js'
-import { readMetrics, readModes, readHubHistory } from './metrics.js'
+import { readMetrics, readModes, readHubHistory, readYesterdayTrend } from './metrics.js'
 
 export const VEHICLE_COUNT = 12000
 const STATUS = { EN_ROUTE: 0, DWELL: 1, ANOMALY: 2 }
@@ -215,9 +215,16 @@ function routeVolumes() {
     .slice(0, 8)
 }
 
+// 每个网点的进出线路今日单量（对端网点 id → 单量），与线路排行同一份累计
+function routeOrdersFor(hubId) {
+  const result = {}
+  ROUTES.forEach(([a, b], index) => { if (a === hubId) result[b] = metrics.routes[index]; else if (b === hubId) result[a] = metrics.routes[index] })
+  return result
+}
+
 function serialHubs(full) {
   const history = readHubHistory()
-  return HUBS.map((h) => ({ ...(full ? h : { id: h.id }), ...hubStats[h.id], ...history[h.id] }))
+  return HUBS.map((h) => ({ ...(full ? h : { id: h.id }), ...hubStats[h.id], ...history[h.id], routeOrders: routeOrdersFor(h.id) }))
 }
 
 export function snapshot() {
@@ -230,6 +237,7 @@ export function snapshot() {
     hubs: serialHubs(true),
     kpi: kpi(),
     trend: [...metrics.trend],
+    trendYesterday: readYesterdayTrend(),
     modes: readModes(),
     punctuality: state.punctuality.map((p) => ({ ...p })),
     routeVolumes: routeVolumes(),
@@ -263,6 +271,7 @@ export function delta() {
     hubs: serialHubs(false),
     kpi: kpi(),
     trend: [...metrics.trend],
+    trendYesterday: readYesterdayTrend(),
     modes: readModes(),
     punctuality: state.punctuality.map((p) => ({ ...p })),
     routeVolumes: routeVolumes(),

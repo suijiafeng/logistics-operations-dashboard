@@ -44,7 +44,8 @@ function validHub(h: unknown, full: boolean) {
   return identity &&
     ['arrivals', 'departures', 'backlog', 'utilization', 'onTime'].every(k => optional(h[k], n => finite(n) && n >= 0)) &&
     optional(h.recentOrders, items => Array.isArray(items) && items.every(n => finite(n) && n >= 0)) &&
-    optional(h.recentLabels, items => Array.isArray(items) && items.every(isString))
+    optional(h.recentLabels, items => Array.isArray(items) && items.every(isString)) &&
+    optional(h.routeOrders, o => isRecord(o) && Object.values(o).every(n => finite(n) && n >= 0))
 }
 
 // 线路下标必须是有效整数下标：0.5、-1、越界值都会让地图取不到线路
@@ -55,6 +56,7 @@ function validStats(value: Record<string, unknown>, fullHubs: boolean) {
     ['id', 'fromId', 'toId'].every(k => optional(n[k], isString)))
   const events = value.events
   return Array.isArray(value.trend) && value.trend.length === 24 && value.trend.every(n => n === null || finite(n) && n >= 0) &&
+    optional(value.trendYesterday, t => Array.isArray(t) && t.length === 24 && t.every(n => finite(n) && n >= 0)) &&
     ['modes', 'punctuality', 'routeVolumes'].every(k => named(value[k])) &&
     Array.isArray(value.hubs) && value.hubs.every(h => validHub(h, fullHubs)) &&
     (events === undefined || Array.isArray(events) && events.every(e => isRecord(e) && finite(e.id) &&

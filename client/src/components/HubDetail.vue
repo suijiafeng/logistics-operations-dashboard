@@ -11,8 +11,15 @@ const store = useDashboardStore()
 const hub = computed(() => store.selectedHub)
 const relatedEvents = computed(() => store.events.filter((event) => hub.value &&
   (event.fromId === hub.value.id || event.toId === hub.value.id || event.place.includes(hub.value.name))).slice(0, 3))
-const routes = computed(() => !hub.value ? [] : ROUTES.filter(([a, b]) => a === hub.value?.id || b === hub.value?.id)
-  .map(([a, b]) => hubById[a === hub.value?.id ? b : a]))
+// 进出干线：有今日单量时按单量降序，单量与底部线路排行同一份累计
+const routes = computed(() => {
+  const h = hub.value
+  if (!h) return []
+  return ROUTES.filter(([a, b]) => a === h.id || b === h.id)
+    .map(([a, b]) => { const peer = hubById[a === h.id ? b : a]; return { peer, orders: h.routeOrders?.[peer.id] } })
+    .sort((x, y) => (y.orders ?? -1) - (x.orders ?? -1))
+})
+const hasRouteOrders = computed(() => routes.value.some((r) => r.orders != null))
 const maxOrders = computed(() => Math.max(1, ...(hub.value?.recentOrders ?? [])))
 const metrics = computed(() => {
   const h = hub.value
@@ -78,9 +85,12 @@ function jump(id: string) {
     </section>
 
     <section class="block">
-      <h5>进出干线 · {{ routes.length }} 条</h5>
+      <h5>进出干线 · {{ routes.length }} 条{{ hasRouteOrders ? ' · 今日单量' : '' }}</h5>
       <div class="peers">
-        <button v-for="peer in routes" :key="peer.id" class="peer" :title="`查看${peer.name}网点`" @click="jump(peer.id)">{{ hub.name }} ↔ {{ peer.name }}</button>
+        <button v-for="r in routes" :key="r.peer.id" class="peer"
+          :title="`${hub.name} ↔ ${r.peer.name}${r.orders != null ? ` · 今日 ${fmtInt(r.orders)} 单` : ''} · 点击查看${r.peer.name}网点`" @click="jump(r.peer.id)">
+          <span class="peer-name">{{ hub.name }} ↔ {{ r.peer.name }}</span><b v-if="r.orders != null">{{ fmtCompact(r.orders) }}</b>
+        </button>
       </div>
     </section>
   </section>
@@ -190,4 +200,7 @@ h5 { font-size: 13px; font-weight: 500; color: var(--color-secondary); margin-bo
   cursor: pointer;
 }
 .peer:hover { background: var(--color-hover); color: var(--color-heading); }
+.peer { display: inline-flex; align-items: center; gap: 6px; }
+.peer-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.peer b { flex: none; font-family: var(--font-number); font-weight: 600; color: var(--color-heading); font-variant-numeric: tabular-nums; }
 </style>

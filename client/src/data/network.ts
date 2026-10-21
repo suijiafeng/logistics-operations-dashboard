@@ -13,6 +13,8 @@ export interface Hub {
   onTime?: number
   recentOrders?: number[]
   recentLabels?: string[]
+  /** 进出线路今日单量：对端网点 id → 单量 */
+  routeOrders?: Record<string, number>
 }
 
 export const HUBS: Hub[] = [

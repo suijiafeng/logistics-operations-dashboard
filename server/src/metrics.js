@@ -52,6 +52,11 @@ export function readMetrics(now = Date.now()) {
     ordersToday: trend.reduce((sum, value) => sum + value, 0) }
 }
 
+// 昨日分时：与今日同一确定性规则生成，昨日已整天完成，即各小时目标值（与昨日实际推送一致）
+export function readYesterdayTrend(now = Date.now()) {
+  return [...profileAt(profileAt(now).start - 1).targets]
+}
+
 export function readModes(now = Date.now()) {
   const base = [46, 27, 15, 12]
   const names = ['干线运输', '城市配送', '快递专线', '冷链运输']

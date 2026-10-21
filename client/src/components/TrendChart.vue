@@ -28,7 +28,7 @@ function render() {
       ...TOOLTIP,
       trigger: 'axis',
       axisPointer: { type: 'shadow', shadowStyle: { color: 'rgba(91, 166, 238, 0.08)' } },
-      formatter: (params: unknown) => formatTrendTooltip(params, store.trend, currentHour),
+      formatter: (params: unknown) => formatTrendTooltip(params, store.trend, currentHour, store.trendYesterday),
     },
     xAxis: {
       type: 'category',
@@ -59,6 +59,16 @@ function render() {
         itemStyle: { color: COLORS.accentArea, borderColor: COLORS.accent, borderWidth: 1, borderType: 'dashed', borderRadius: [2, 2, 0, 0] },
         data: store.trend.map((value, h) => (h === currentHour ? value : null)),
       },
+      {
+        // 昨日同期参考线：浅色细虚线，只作对比背景，不抢柱子的视线
+        name: '昨日',
+        type: 'line',
+        symbol: 'none',
+        silent: true,
+        z: 3,
+        lineStyle: { color: COLORS.secondary, width: 1.5, type: [4, 3], opacity: 0.7 },
+        data: store.trendYesterday.length === 24 ? store.trendYesterday : [],
+      },
     ],
   })
 }
@@ -67,8 +77,8 @@ watch([chart, () => store.chartVersion], render)
 </script>
 
 <template>
-  <Panel title="今日分时运单" :extra="asOf ? `北京时间 · 截至 ${asOf}` : '北京时间'">
-    <div ref="el" class="chart" role="img" aria-label="今日各小时运单量柱状图，橙色虚线柱为当前小时累计中" />
+  <Panel title="今日分时运单" :extra="`${asOf ? `截至 ${asOf}` : '北京时间'}${store.trendYesterday.length === 24 ? ' · 虚线为昨日' : ''}`">
+    <div ref="el" class="chart" role="img" aria-label="今日各小时运单量柱状图，橙色虚线柱为当前小时累计中，浅色虚线为昨日各小时运单" />
   </Panel>
 </template>
 
