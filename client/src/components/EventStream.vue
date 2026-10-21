@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import Panel from './Panel.vue'
 import { useDashboardStore } from '../stores/dashboard'
 import { GUANGDONG_HUB_IDS } from '../data/network'
+import { EVENT_ROW_HEIGHT } from '../design/tokens'
 
 const store = useDashboardStore()
 const LEVEL_CLASS = ['lv0', 'lv1', 'lv2']
@@ -23,7 +24,7 @@ function locate(place: string) {
 
 onMounted(() => {
   observer = new ResizeObserver(([entry]) => {
-    capacity.value = Math.max(0, Math.floor(entry.contentRect.height / 72))
+    capacity.value = Math.max(0, Math.floor(entry.contentRect.height / EVENT_ROW_HEIGHT))
   })
   if (stream.value) observer.observe(stream.value)
 })
@@ -33,7 +34,7 @@ onBeforeUnmount(() => observer?.disconnect())
 <template>
   <Panel title="实时异常事件" extra="严重优先 · 点击定位">
     <div ref="stream" class="stream">
-      <p v-if="store.events.length === 0" class="empty">暂无异常事件，等待模拟引擎推送…</p>
+      <p v-if="store.hasData && store.events.length === 0" class="empty">本次连接暂无新事件。</p>
       <TransitionGroup name="evt" tag="ul" class="list">
         <li v-for="e in visibleEvents" :key="e.id" class="item" role="button" tabindex="0"
           :aria-label="`${e.type}，${e.place}，点击定位目的网点`"
@@ -62,75 +63,75 @@ onBeforeUnmount(() => observer?.disconnect())
   position: relative;
 }
 .empty {
-  color: #8fa3b8;
-  font-size: 13px;
-  padding: 8px 4px;
+  color: var(--color-secondary);
+  font-size: var(--font-body);
+  padding: var(--space-2) var(--space-1);
 }
 .list {
   list-style: none;
 }
 .item {
   display: flex;
-  gap: 9px;
-  padding: 7px 4px;
-  border-bottom: 1px dashed #16222d;
-  height: 72px;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-1);
+  border-bottom: 1px dashed var(--color-track);
+  height: var(--event-row-height);
   cursor: pointer;
 }
-.item:hover { background: #16202a; }
+.item:hover { background: var(--color-track); }
 .badge {
   flex: none;
   height: 20px;
-  padding: 0 7px;
+  padding: 0 var(--space-2);
   border-radius: 3px;
-  font-size: 11px;
+  font-size: var(--font-small);
   line-height: 20px;
   font-weight: 600;
   white-space: nowrap;
 }
-.lv0 { background: #233242; color: #9db4c9; }
-.lv1 { background: #4a3a17; color: #eec27a; }
-.lv2 { background: #57201d; color: #ff9d97; }
+.lv0 { background: var(--color-infoBg); color: var(--color-secondary); }
+.lv1 { background: var(--color-warningBg); color: var(--color-warning); }
+.lv2 { background: var(--color-dangerBg); color: var(--color-dangerText); }
 .main {
   flex: 1;
   min-width: 0;
 }
 .line1 {
   display: flex;
-  gap: 8px;
+  gap: var(--space-2);
   align-items: baseline;
-  font-size: 13px;
+  font-size: var(--font-body);
 }
 .line1 b {
-  color: #eef4fa;
+  color: var(--color-heading);
   font-weight: 600;
   white-space: nowrap;
   flex: none;
 }
 .vehicle {
-  color: #ffb066;
+  color: var(--color-accentText);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   flex: none;
 }
 .place {
-  color: #7e93a8;
+  color: var(--color-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 12px;
+  font-size: var(--font-small);
   line-height: 18px;
 }
 time {
   margin-left: auto;
-  color: #8fa3b8;
-  font-size: 12px;
+  color: var(--color-secondary);
+  font-size: var(--font-small);
   font-variant-numeric: tabular-nums;
   flex: none;
 }
 .desc {
-  font-size: 12px;
-  color: #8fa3b8;
+  font-size: var(--font-small);
+  color: var(--color-secondary);
   margin-top: 1px;
   white-space: nowrap;
   overflow: hidden;

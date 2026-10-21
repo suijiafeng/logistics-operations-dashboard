@@ -6,14 +6,14 @@ import { useDashboardStore } from '../stores/dashboard'
 const store = useDashboardStore()
 const max = computed(() => {
   const t = store.topHubs[0]
-  return t ? (t.arrivals ?? 0) + (t.departures ?? 0) : 1
+  return t ? Math.max(1, (t.arrivals ?? 0) + (t.departures ?? 0)) : 1
 })
 </script>
 
 <template>
   <Panel title="网点吞吐 TOP5" extra="到车 + 发车">
     <ul class="list">
-      <li v-for="(h, i) in store.topHubs" :key="h.id" :class="{ selected: h.id === store.selectedHubId }"
+      <li v-for="(h, i) in store.topHubs" :key="h.id" class="interactive-row" :class="{ selected: h.id === store.selectedHubId }"
         role="button" tabindex="0" :aria-pressed="h.id === store.selectedHubId"
         @click="store.selectHub(h.id)" @keydown.enter="store.selectHub(h.id)" @keydown.space.prevent="store.selectHub(h.id)">
         <span class="rank">{{ i + 1 }}</span>
@@ -41,22 +41,22 @@ const max = computed(() => {
 li {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 4px 2px;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-1);
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
 }
 li:hover {
-  background: #111a23;
+  background: var(--color-hover);
 }
-li.selected { background: #2a251e; box-shadow: inset 2px 0 #ff8a3d; }
+li.selected { background: var(--color-selected); box-shadow: inset 2px 0 var(--color-accent); }
 .rank {
   width: 18px;
   height: 18px;
-  border-radius: 4px;
-  background: #1a2634;
-  color: #ffb066;
-  font-size: 12px;
+  border-radius: var(--radius-control);
+  background: var(--color-track);
+  color: var(--color-accentText);
+  font-size: var(--font-small);
   font-weight: 700;
   display: flex;
   align-items: center;
@@ -65,29 +65,29 @@ li.selected { background: #2a251e; box-shadow: inset 2px 0 #ff8a3d; }
 }
 .name {
   width: 40px;
-  font-size: 13px;
-  color: #c8d6e3;
+  font-size: var(--font-body);
+  color: var(--color-text);
   flex: none;
 }
 .bar {
   flex: 1;
   height: 8px;
-  background: #16202a;
-  border-radius: 4px;
+  background: var(--color-track);
+  border-radius: var(--radius-control);
   overflow: hidden;
 }
 .fill {
   display: block;
   height: 100%;
-  background: #ff8a3d;
-  border-radius: 4px;
+  background: var(--color-accent);
+  border-radius: var(--radius-control);
   transition: width 0.6s ease;
 }
 .val {
   width: 58px;
   text-align: right;
-  font-size: 13px;
-  color: #d7e2ec;
+  font-size: var(--font-body);
+  color: var(--color-text);
   font-variant-numeric: tabular-nums;
 }
 </style>

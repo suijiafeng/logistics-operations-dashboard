@@ -38,7 +38,7 @@ onBeforeUnmount(() => cancelAnimationFrame(raf))
     <div class="hud-title">性能监测（本机实测）</div>
     <div class="row"><span>FPS</span><b>{{ fps }}</b></div>
     <div class="row"><span>平均帧耗时</span><b>{{ frameMs }} ms</b></div>
-    <div class="row"><span>车辆点位</span><b>{{ store.vehicleCount.toLocaleString('zh-CN') }}</b></div>
+    <div class="row"><span>车辆点位</span><b>{{ store.hasData ? store.vehicleCount.toLocaleString('zh-CN') : '—' }}</b></div>
     <div class="row"><span>增量包大小</span><b>{{ store.lastDeltaKB.toFixed(1) }} KB/s</b></div>
     <div class="row"><span>推送延迟</span><b>{{ store.latencyMs }} ms</b></div>
     <div class="row"><span>已收增量包</span><b>{{ store.deltaCount }}</b></div>
@@ -49,30 +49,30 @@ onBeforeUnmount(() => cancelAnimationFrame(raf))
 .hud {
   position: absolute;
   /* 悬浮在中央地图右下角，不遮挡左右数据列 */
-  right: 362px;
-  bottom: 192px;
+  right: var(--space-4);
+  bottom: 52px;
   width: 196px;
-  background: rgba(8, 12, 16, 0.92);
-  border-radius: 6px;
-  padding: 10px 12px;
-  font-size: 12px;
+  background: var(--color-hud);
+  border-radius: var(--radius-panel);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--font-small);
   z-index: 20;
   pointer-events: none;
 }
 .hud-title {
-  color: #ffb066;
+  color: var(--color-accentText);
   font-weight: 600;
   letter-spacing: 1px;
-  margin-bottom: 6px;
+  margin-bottom: var(--space-2);
 }
 .row {
   display: flex;
   justify-content: space-between;
-  padding: 2px 0;
-  color: #7e93a8;
+  padding: var(--space-1) 0;
+  color: var(--color-secondary);
 }
 .row b {
-  color: #d7e2ec;
+  color: var(--color-text);
   font-variant-numeric: tabular-nums;
   font-weight: 600;
 }

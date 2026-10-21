@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useDashboardStore } from '../stores/dashboard'
+import { HIGH_UTILIZATION } from '../design/tokens'
 
 const store = useDashboardStore()
 const hub = computed(() => store.selectedHub)
@@ -11,7 +12,7 @@ function fmt(n?: number) {
 </script>
 
 <template>
-  <div v-if="hub" class="hub-detail">
+  <section v-if="hub && store.hasData" class="hub-detail" aria-label="网点详情">
     <header>
       <h4>{{ hub.name }}分拨中心</h4>
       <button class="close" aria-label="关闭网点详情（Esc）" @click="store.selectHub(null)">×</button>
@@ -24,10 +25,11 @@ function fmt(n?: number) {
     </div>
     <div class="util">
       <div class="util-head"><span>仓配利用率</span><b>{{ hub.utilization ?? 0 }}%</b></div>
+      <p class="load-state" :class="{ hot: (hub.utilization ?? 0) >= HIGH_UTILIZATION }">{{ (hub.utilization ?? 0) >= HIGH_UTILIZATION ? '高负载' : '正常' }} · 预警阈值 ≥{{ HIGH_UTILIZATION }}%</p>
       <div class="bar"><div class="fill" :style="{ width: `${hub.utilization ?? 0}%` }" /></div>
     </div>
     <p class="note">数据由模拟引擎按该网点实时状态推送，点击其他网点可切换。</p>
-  </div>
+  </section>
 </template>
 
 <style scoped>
@@ -36,75 +38,78 @@ function fmt(n?: number) {
   top: 12px;
   right: 12px;
   width: 252px;
-  background: rgba(13, 20, 27, 0.96);
-  border-radius: 6px;
-  padding: 14px 16px;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  background: var(--color-overlay);
+  border-radius: var(--radius-panel);
+  padding: var(--space-4) var(--space-4);
+  box-shadow: var(--shadow-panel);
   z-index: 5;
 }
 header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
+  margin-bottom: var(--space-2);
 }
 h4 {
-  font-size: 16px;
-  color: #eef4fa;
+  font-size: var(--font-title);
+  color: var(--color-heading);
   letter-spacing: 1px;
 }
 .close {
   background: none;
   border: none;
-  color: #7e93a8;
-  font-size: 18px;
+  color: var(--color-secondary);
+  font-size: var(--font-title);
   cursor: pointer;
   line-height: 1;
 }
+.close:hover { background: var(--color-hover); color: var(--color-heading); }
+.load-state { font-size: var(--font-small); color: var(--color-secondary); margin-bottom: var(--space-1); }
+.load-state.hot { color: var(--color-dangerText); }
 .rows .row {
   display: flex;
   justify-content: space-between;
-  padding: 5px 0;
-  font-size: 13px;
-  color: #7e93a8;
+  padding: var(--space-1) 0;
+  font-size: var(--font-body);
+  color: var(--color-secondary);
 }
 .rows .row b {
-  color: #d7e2ec;
+  color: var(--color-text);
   font-variant-numeric: tabular-nums;
   font-weight: 600;
 }
 .rows .row b.warn {
-  color: #ff8f8a;
+  color: var(--color-dangerText);
 }
 .util {
-  margin-top: 10px;
+  margin-top: var(--space-2);
 }
 .util-head {
   display: flex;
   justify-content: space-between;
-  font-size: 13px;
-  color: #7e93a8;
-  margin-bottom: 5px;
+  font-size: var(--font-body);
+  color: var(--color-secondary);
+  margin-bottom: var(--space-1);
 }
 .util-head b {
-  color: #ffd9ae;
+  color: var(--color-accentValue);
 }
 .bar {
   height: 8px;
-  background: #1a2634;
-  border-radius: 4px;
+  background: var(--color-track);
+  border-radius: var(--radius-control);
   overflow: hidden;
 }
 .fill {
   height: 100%;
-  background: #ff8a3d;
-  border-radius: 4px;
+  background: var(--color-accent);
+  border-radius: var(--radius-control);
   transition: width 0.6s ease;
 }
 .note {
-  margin-top: 10px;
-  font-size: 12px;
-  color: #8fa3b8;
+  margin-top: var(--space-2);
+  font-size: var(--font-small);
+  color: var(--color-secondary);
   line-height: 1.5;
 }
 </style>

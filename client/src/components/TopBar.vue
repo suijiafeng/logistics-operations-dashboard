@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useDashboardStore } from '../stores/dashboard'
+import { useMediaQuery } from '../services/useMediaQuery'
 
 const store = useDashboardStore()
+const reducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)')
 const STATUS_TEXT = {
   connecting: '正在连接数据服务',
   connected: '实时数据已连接',
@@ -18,7 +20,7 @@ onMounted(() => {
 onBeforeUnmount(() => window.clearInterval(timer))
 
 function fmt(n: number) {
-  return n.toLocaleString('zh-CN')
+  return store.hasData ? n.toLocaleString('zh-CN') : '—'
 }
 </script>
 
@@ -43,7 +45,7 @@ function fmt(n: number) {
       </div>
       <div class="kpi">
         <span class="kpi-label">准时率</span>
-        <span class="kpi-value">{{ store.kpi.onTimeRate.toFixed(1) }}<small>%</small></span>
+        <span class="kpi-value">{{ store.hasData ? store.kpi.onTimeRate.toFixed(1) : '—' }}<small>%</small></span>
       </div>
       <div class="kpi alert">
         <span class="kpi-label">待处理异常</span>
@@ -57,14 +59,16 @@ function fmt(n: number) {
         <span class="date">{{ now.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'short', timeZone: 'Asia/Shanghai' }) }}</span>
       </div>
       <div class="status" :title="store.connectionError || undefined">
-        <span class="dot" :class="{ off: !store.connected, waiting: store.connectionState === 'connecting' || store.connectionState === 'reconnecting' }" />
-        {{ STATUS_TEXT[store.connectionState] }}
+        <span class="dot" :class="{ off: store.dataStatus !== 'ready', waiting: store.dataStatus === 'stale' || store.connectionState === 'connecting' || store.connectionState === 'reconnecting' }" />
+        {{ store.dataStatus === 'stale' ? '数据已过期' : STATUS_TEXT[store.connectionState] }}
         <span v-if="store.reconnectAttempt">（第 {{ store.reconnectAttempt }} 次）</span>
-        <span class="sim">数据来源：自研模拟引擎（仿真数据）</span>
+        <span class="sim">自研引擎 · 仿真数据</span>
       </div>
       <div class="tools">
         <span class="updated">{{ store.dataAt ? `更新 ${new Date(store.dataAt).toLocaleTimeString('zh-CN', { hour12: false, timeZone: 'Asia/Shanghai' })}` : '等待首包数据' }}</span>
         <button class="hud-btn" :aria-pressed="store.hudOn" :class="{ on: store.hudOn }" @click="store.toggleHud()">性能 HUD</button>
+        <button class="hud-btn" :aria-pressed="store.decorationsOn && !reducedMotion" :disabled="reducedMotion"
+          @click="store.decorationsOn = !store.decorationsOn">{{ reducedMotion ? '已减少动态效果' : store.decorationsOn ? '关闭装饰动效' : '开启动效' }}</button>
       </div>
     </div>
   </header>
@@ -74,44 +78,45 @@ function fmt(n: number) {
 .topbar {
   display: flex;
   align-items: center;
-  gap: 28px;
-  padding: 0 20px;
-  background: #0a0f14;
+  gap: var(--space-6);
+  padding: var(--space-2) var(--space-4);
+  min-height: 88px;
+  background: var(--color-header);
 }
 .brand {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
   flex: none;
 }
 .logo {
   width: 40px;
   height: 40px;
-  border-radius: 8px;
-  background: #ff8a3d;
-  color: #131313;
-  font-size: 22px;
+  border-radius: var(--radius-panel);
+  background: var(--color-accent);
+  color: var(--color-onAccent);
+  font-size: var(--font-page);
   font-weight: 800;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 .titles h1 {
-  font-size: 21px;
+  font-size: var(--font-page);
   font-weight: 700;
-  letter-spacing: 2px;
-  color: #eef4fa;
+  letter-spacing: 0;
+  color: var(--color-heading);
   white-space: nowrap;
 }
 .titles p {
-  font-size: 12px;
-  color: #8fa3b8;
+  font-size: var(--font-small);
+  color: var(--color-secondary);
   letter-spacing: 3px;
   margin-top: 1px;
 }
 .kpis {
   display: flex;
-  gap: 34px;
+  gap: var(--space-6);
   margin: 0 auto;
 }
 .kpi {
@@ -120,70 +125,70 @@ function fmt(n: number) {
   align-items: flex-start;
 }
 .kpi-label {
-  font-size: 12px;
-  color: #7e93a8;
+  font-size: var(--font-small);
+  color: var(--color-secondary);
   letter-spacing: 2px;
 }
 .kpi-value {
-  font-size: 30px;
+  font-size: var(--font-kpi);
   font-weight: 700;
-  color: #ffd9ae;
+  color: var(--color-accentValue);
   font-variant-numeric: tabular-nums;
   line-height: 1.15;
 }
 .kpi-value small {
-  font-size: 13px;
-  color: #7e93a8;
-  margin-left: 4px;
+  font-size: var(--font-body);
+  color: var(--color-secondary);
+  margin-left: var(--space-1);
   font-weight: 400;
 }
 .kpi.alert .kpi-value {
-  color: #ff8f8a;
+  color: var(--color-dangerText);
 }
 .meta {
   flex: none;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 2px;
+  gap: var(--space-1);
 }
 .clock {
-  font-size: 19px;
+  font-size: var(--font-title);
   font-weight: 600;
-  color: #d7e2ec;
+  color: var(--color-text);
   font-variant-numeric: tabular-nums;
 }
 .clock .date {
-  font-size: 12px;
-  color: #8fa3b8;
-  margin-left: 8px;
+  font-size: var(--font-small);
+  color: var(--color-secondary);
+  margin-left: var(--space-2);
   font-weight: 400;
 }
 .status {
   display: flex;
   align-items: center;
-  gap: 7px;
-  font-size: 12px;
-  color: #7e93a8;
+  gap: var(--space-2);
+  font-size: var(--font-small);
+  color: var(--color-secondary);
 }
 .status .dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #34c77b;
+  background: var(--color-success);
   animation: pulse 1.6s infinite;
 }
 .status .dot.off {
-  background: #f0524d;
+  background: var(--color-danger);
   animation: none;
 }
 .status .dot.waiting {
-  background: #e8b13c;
+  background: var(--color-warning);
   animation: pulse 1.6s infinite;
 }
 .status .sim {
-  color: #8fa3b8;
-  margin-left: 6px;
+  color: var(--color-secondary);
+  margin-left: var(--space-2);
 }
 @keyframes pulse {
   0% { opacity: 1; }
@@ -191,20 +196,45 @@ function fmt(n: number) {
   100% { opacity: 1; }
 }
 .hud-btn {
-  margin-top: 2px;
-  background: #16202a;
-  color: #7e93a8;
+  margin-top: var(--space-1);
+  background: var(--color-track);
+  color: var(--color-secondary);
   border: none;
-  border-radius: 4px;
-  padding: 3px 10px;
-  font-size: 12px;
+  border-radius: var(--radius-control);
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--font-small);
   cursor: pointer;
 }
 .hud-btn.on {
-  background: #ff8a3d;
-  color: #131313;
+  background: var(--color-accent);
+  color: var(--color-onAccent);
   font-weight: 600;
 }
-.tools { display: flex; align-items: center; gap: 12px; }
-.updated { font-size: 11px; color: #8fa3b8; font-variant-numeric: tabular-nums; }
+.tools { display: flex; align-items: center; gap: var(--space-3); }
+.updated { font-size: var(--font-small); color: var(--color-secondary); font-variant-numeric: tabular-nums; }
+.hud-btn:hover { background: var(--color-hover); }
+.hud-btn.on:hover { background: var(--color-accentText); color: var(--color-onAccent); }
+.hud-btn:disabled { color: var(--color-secondary); cursor: default; }
+@media (max-width: 1599px) {
+  .topbar { gap: var(--space-4); padding-inline: var(--space-3); }
+  .titles h1 { font-size: var(--font-compactPage); }
+  .titles p { letter-spacing: 0; }
+  .kpis { gap: var(--space-4); }
+  .sim { display: none; }
+  .titles p::after { content: ' · 仿真数据'; }
+}
+@media (max-width: 1279px) {
+  .topbar { flex-wrap: wrap; }
+  .brand { width: 100%; }
+  .kpis { flex: 1; margin: 0; }
+}
+@media (max-width: 767px) {
+  .topbar { padding: var(--space-3); }
+  .titles h1 { font-size: var(--font-title); white-space: normal; }
+  .kpis { width: 100%; flex: auto; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+  .kpi-value { font-size: var(--font-page); }
+  .kpi-label { letter-spacing: 0; }
+  .meta { width: 100%; align-items: flex-start; }
+  .tools { flex-wrap: wrap; }
+}
 </style>

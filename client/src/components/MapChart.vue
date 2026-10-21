@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as echarts from 'echarts'
-import { useEcharts, ACCENT, RED } from '../services/useEcharts'
+import { useEcharts, ACCENT, RED, TOOLTIP, TEXT } from '../services/useEcharts'
+import { COLORS, FONT } from '../design/tokens'
+import { useChartMotion } from '../services/useChartMotion'
 import { useDashboardStore } from '../stores/dashboard'
 import { HUBS, ROUTES, hubById } from '../data/network'
 import chinaGeo from '../assets/geo/china.json'
 
 const store = useDashboardStore()
 const { el, chart } = useEcharts()
+const motion = useChartMotion()
 
 let gdRegistered = false
 let containsGuangdong: ((lng: number, lat: number) => boolean) | undefined
@@ -21,7 +24,7 @@ const switching = ref(false)
 const mapError = ref('')
 let fedCount = 0 // 首屏分片渐进：已喂入的车辆数
 
-const STATUS_COLORS = ['#ffb066', '#5b7a99', RED] // 在途 / 装卸 / 异常
+const STATUS_COLORS = [COLORS.accentText, COLORS.muted, RED] // 在途 / 装卸 / 异常
 const STATUS_SIZES = [4, 4, 6]
 
 function inView(lng: number, lat: number) {
@@ -88,12 +91,12 @@ function hubData() {
     return {
       name: h.name, hubId: h.id, level: h.level, value: [h.lng, h.lat],
       symbolSize: selected ? 18 : h.level === 1 ? 13 : h.level === 2 ? 10 : 8,
-      itemStyle: { color: selected ? '#fff2cf' : ACCENT, borderColor: selected ? ACCENT : 'transparent', borderWidth: 2 },
+      itemStyle: { color: selected ? COLORS.accentValue : ACCENT, borderColor: selected ? ACCENT : 'transparent', borderWidth: 2 },
       label: {
         show: store.view === 'guangdong' || h.level === 1 || selected,
         position: h.id === 'fs' || h.id === 'zh' ? 'left' : h.id === 'dg' || h.id === 'gz' ? 'top' : 'right',
         offset: h.id === 'fs' ? [-8, 12] : h.id === 'gz' ? [-8, -16] : h.id === 'dg' ? [16, -8] : [0, 0],
-        color: selected ? '#fff2cf' : '#c8d6e3',
+        color: selected ? COLORS.accentValue : COLORS.text,
       },
     }
   })
@@ -117,25 +120,25 @@ function baseOption() {
     }) }]
   })
   return {
+    animation: motion.value,
+    textStyle: TEXT,
     backgroundColor: 'transparent',
     tooltip: {
+      ...TOOLTIP,
       trigger: 'item',
-      backgroundColor: '#131c26',
-      borderWidth: 0,
-      textStyle: { color: '#d7e2ec', fontSize: 13 },
     },
     geo: {
       map: store.view,
       roam: false,
       layoutCenter: store.view === 'china' ? ['50%', '52%'] : ['50%', '50%'],
       layoutSize: store.view === 'china' ? '112%' : '96%',
-      itemStyle: { areaColor: '#101a24', borderColor: '#2a3d51', borderWidth: 0.8 },
+      itemStyle: { areaColor: COLORS.mapArea, borderColor: COLORS.mapBorder, borderWidth: 0.8 },
       emphasis: { disabled: true, label: { show: false } },
       select: { disabled: true },
       label: { show: false },
       tooltip: { formatter: (p: { name: string }) => store.view === 'china' && p.name === '广东省' ? '广东省 · 点击下钻' : '' },
-      regions: [{ name: '广东省', itemStyle: { areaColor: '#14202c' },
-        emphasis: { disabled: false, itemStyle: { areaColor: '#293423' }, label: { show: false } } }],
+      regions: [{ name: '广东省', itemStyle: { areaColor: COLORS.mapProvince },
+        emphasis: { disabled: false, itemStyle: { areaColor: COLORS.mapHover }, label: { show: false } } }],
     },
     series: [
       {
@@ -145,8 +148,8 @@ function baseOption() {
         zlevel: 1,
         polyline: true,
         silent: true,
-        lineStyle: { color: '#39506a', width: 1, opacity: 0.4 },
-        effect: { show: true, period: 9, trailLength: 0.08, symbolSize: 2, color: '#be8959' },
+        lineStyle: { color: COLORS.route, width: 1, opacity: 0.55 },
+        effect: { show: motion.value, period: 9, trailLength: 0.08, symbolSize: 2, color: COLORS.accentText },
         data: lines,
       },
       ...[0, 1, 2].map((s) => ({
@@ -165,7 +168,7 @@ function baseOption() {
       })),
       {
         id: 'hubs',
-        type: 'effectScatter',
+        type: motion.value ? 'effectScatter' : 'scatter',
         coordinateSystem: 'geo',
         zlevel: 3,
         rippleEffect: { brushType: 'stroke', scale: 2.6 },
@@ -176,8 +179,8 @@ function baseOption() {
           show: true,
           formatter: (p: { data?: { name?: string } }) => p.data?.name ?? '',
           position: 'right',
-          color: '#c8d6e3',
-          fontSize: 12,
+          color: COLORS.text,
+          fontSize: FONT.small,
         },
         labelLayout: { hideOverlap: true },
         emphasis: { label: { show: true } },
@@ -253,6 +256,7 @@ onBeforeUnmount(() => {
 watch(() => store.selectedHubId, () => {
   chart.value?.setOption({ series: [{ id: 'hubs', data: hubData() }] })
 })
+watch(motion, () => { void rebuildMap() })
 
 // 视图切换（全国 ↔ 广东下钻）时整图重建
 watch(
@@ -276,6 +280,7 @@ watch(
 <template>
   <div class="map-wrap">
     <div ref="el" class="map-chart" :class="{ switching }" />
+    <p v-if="!store.hasData" class="map-loading">{{ store.dataStatus === 'error' ? '车辆数据暂不可用' : '正在加载车辆数据…' }}</p>
     <p v-if="mapError" class="map-error" role="alert">{{ mapError }}</p>
     <div class="map-legend">
       <span><i class="dot enroute" />在途</span>
@@ -293,8 +298,8 @@ watch(
   position: relative;
   flex: 1;
   min-height: 0;
-  background: #0d141b;
-  border-radius: 6px;
+  background: var(--color-panel);
+  border-radius: var(--radius-panel);
   overflow: hidden;
 }
 .map-chart {
@@ -303,44 +308,50 @@ watch(
   transition: opacity 0.2s ease;
 }
 .map-chart.switching { opacity: 0.25; }
-.map-error { position: absolute; top: 16px; left: 150px; color: #ff9d97; font-size: 13px; }
+.map-loading { position: absolute; top: var(--space-4); left: var(--space-4); padding: var(--space-2); color: var(--color-secondary); background: var(--color-panel); }
+.map-error { position: absolute; top: 16px; left: 150px; color: var(--color-dangerText); font-size: var(--font-body); }
 .map-legend {
   position: absolute;
   left: 14px;
   bottom: 12px;
   display: flex;
-  gap: 14px;
+  gap: var(--space-4);
   align-items: center;
-  font-size: 12px;
-  color: #7e93a8;
-  background: rgba(10, 15, 20, 0.82);
-  padding: 5px 10px;
-  border-radius: 4px;
+  font-size: var(--font-small);
+  color: var(--color-secondary);
+  background: var(--color-legend);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-control);
 }
 .map-legend .dot {
   display: inline-block;
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  margin-right: 5px;
+  margin-right: var(--space-1);
 }
-.dot.enroute { background: #ffb066; }
-.dot.dwell { background: #5b7a99; }
-.dot.anomaly { background: #f0524d; }
+.dot.enroute { background: var(--color-accentText); }
+.dot.dwell { background: var(--color-muted); }
+.dot.anomaly { background: var(--color-danger); }
 .map-legend .hint {
-  color: #8fa3b8;
+  color: var(--color-secondary);
 }
 .back-btn {
   position: absolute;
   top: 12px;
   left: 14px;
-  background: #ff8a3d;
-  color: #131313;
+  background: var(--color-accent);
+  color: var(--color-onAccent);
   border: none;
-  border-radius: 4px;
-  padding: 5px 14px;
-  font-size: 13px;
+  border-radius: var(--radius-control);
+  padding: var(--space-1) var(--space-4);
+  font-size: var(--font-body);
   font-weight: 600;
   cursor: pointer;
+}
+.back-btn:hover { background: var(--color-accentText); }
+@media (max-width: 767px) {
+  .map-legend { right: var(--space-4); flex-wrap: wrap; gap: var(--space-2); }
+  .map-legend .hint { flex-basis: 100%; }
 }
 </style>

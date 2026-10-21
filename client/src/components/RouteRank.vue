@@ -4,7 +4,7 @@ import Panel from './Panel.vue'
 import { useDashboardStore } from '../stores/dashboard'
 
 const store = useDashboardStore()
-const max = computed(() => store.routeVolumes[0]?.value ?? 1)
+const max = computed(() => Math.max(1, store.routeVolumes[0]?.value ?? 0))
 </script>
 
 <template>
@@ -27,22 +27,22 @@ const max = computed(() => store.routeVolumes[0]?.value ?? 1)
   grid-template-columns: 1fr 1fr;
   grid-template-rows: repeat(4, 1fr);
   grid-auto-flow: column;
-  column-gap: 36px;
+  column-gap: var(--space-8);
   align-items: center;
-  padding: 0 6px;
+  padding: 0 var(--space-2);
 }
 .item {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: var(--space-2);
 }
 .rank {
   width: 18px;
   height: 18px;
-  border-radius: 4px;
-  background: #1a2634;
-  color: #ffb066;
-  font-size: 12px;
+  border-radius: var(--radius-control);
+  background: var(--color-track);
+  color: var(--color-accentText);
+  font-size: var(--font-small);
   font-weight: 700;
   display: flex;
   align-items: center;
@@ -51,31 +51,34 @@ const max = computed(() => store.routeVolumes[0]?.value ?? 1)
 }
 .name {
   width: 108px;
-  font-size: 13px;
-  color: #c8d6e3;
+  font-size: var(--font-body);
+  color: var(--color-text);
   flex: none;
   white-space: nowrap;
 }
 .bar {
   flex: 1;
   height: 8px;
-  background: #16202a;
-  border-radius: 4px;
+  background: var(--color-track);
+  border-radius: var(--radius-control);
   overflow: hidden;
   max-width: 520px;
 }
 .fill {
   display: block;
   height: 100%;
-  background: #ff8a3d;
-  border-radius: 4px;
+  background: var(--color-accent);
+  border-radius: var(--radius-control);
   transition: width 0.6s ease;
 }
 .val {
   width: 52px;
   text-align: right;
-  font-size: 13px;
-  color: #d7e2ec;
+  font-size: var(--font-body);
+  color: var(--color-text);
   font-variant-numeric: tabular-nums;
+}
+@media (max-width: 767px) {
+  .grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(8, minmax(28px, 1fr)); grid-auto-flow: row; column-gap: 0; padding: 0; }
 }
 </style>
