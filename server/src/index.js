@@ -5,14 +5,25 @@ import { WebSocketServer } from 'ws'
 import { step, snapshot, delta } from './engine.js'
 
 const PORT = process.env.PORT || 8787
+const configuredMaxBuffered = Number(process.env.WS_MAX_BUFFERED_BYTES || 1_000_000)
+const MAX_BUFFERED_BYTES = Number.isFinite(configuredMaxBuffered) && configuredMaxBuffered > 0
+  ? configuredMaxBuffered
+  : 1_000_000
 
 const server = http.createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*')
   if (req.url === '/snapshot') {
-    const body = JSON.stringify(snapshot())
-    res.setHeader('Content-Type', 'application/json')
-    res.end(body)
-    console.log(`[snapshot] ${(body.length / 1024).toFixed(1)} KB`)
+    try {
+      const body = JSON.stringify(snapshot())
+      res.setHeader('Content-Type', 'application/json')
+      res.end(body)
+      console.log(`[snapshot] ${(body.length / 1024).toFixed(1)} KB`)
+    } catch (error) {
+      console.error('[snapshot] generate failed', error)
+      res.statusCode = 500
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ error: 'snapshot_unavailable' }))
+    }
     return
   }
   if (req.url === '/health') {
@@ -29,24 +40,42 @@ wss.on('connection', (ws) => {
   console.log('[ws] client connected, total =', wss.clients.size)
   ws.send(JSON.stringify({ type: 'hello', ts: Date.now() }))
   ws.on('close', () => console.log('[ws] client disconnected, total =', wss.clients.size))
+  ws.on('error', (error) => console.error('[ws] client error', error.message))
 })
+wss.on('error', (error) => console.error('[ws] server error', error))
 
 // 仿真步进
 setInterval(() => step(250), 250)
 
 // 1 秒聚合广播
 let lastBytes = 0
+let skippedSlowClients = 0
 setInterval(() => {
   if (wss.clients.size === 0) return
   const body = JSON.stringify(delta())
   lastBytes = body.length
   for (const ws of wss.clients) {
-    if (ws.readyState === ws.OPEN) ws.send(body)
+    if (ws.readyState !== ws.OPEN) continue
+    if (ws.bufferedAmount > MAX_BUFFERED_BYTES) {
+      skippedSlowClients++
+      continue
+    }
+    ws.send(body, (error) => {
+      if (error) console.error('[ws] send failed', error.message)
+    })
   }
 }, 1000)
 setInterval(() => {
-  if (lastBytes) console.log(`[delta] ${(lastBytes / 1024).toFixed(1)} KB/s → ${wss.clients.size} clients`)
+  if (lastBytes) {
+    const skipped = skippedSlowClients ? `, skipped slow clients ${skippedSlowClients}` : ''
+    console.log(`[delta] ${(lastBytes / 1024).toFixed(1)} KB/s → ${wss.clients.size} clients${skipped}`)
+    skippedSlowClients = 0
+  }
 }, 15000)
+
+server.on('error', (error) => {
+  console.error('[http] server error', error)
+})
 
 server.listen(PORT, () => {
   console.log(`模拟数据引擎已启动: http://localhost:${PORT}（快照 /snapshot，WS 同端口）`)

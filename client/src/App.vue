@@ -11,7 +11,7 @@ import PunctualityChart from './components/PunctualityChart.vue'
 import WarehousePanel from './components/WarehousePanel.vue'
 import RouteRank from './components/RouteRank.vue'
 import Hud from './components/Hud.vue'
-import { startDataFeed } from './services/socket'
+import { startDataFeed, stopDataFeed } from './services/socket'
 import { useDashboardStore } from './stores/dashboard'
 
 // 大屏适配：1920×1080 基准画布，按窗口尺寸等比缩放并居中
@@ -38,6 +38,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   window.removeEventListener('resize', updateScale)
   window.removeEventListener('keydown', onKey)
+  stopDataFeed()
 })
 </script>
 

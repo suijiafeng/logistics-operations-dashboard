@@ -3,6 +3,13 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useDashboardStore } from '../stores/dashboard'
 
 const store = useDashboardStore()
+const STATUS_TEXT = {
+  connecting: '正在连接数据服务',
+  connected: '实时数据已连接',
+  reconnecting: '实时数据重连中',
+  error: '数据服务暂不可用',
+  idle: '数据连接已停止',
+}
 const now = ref(new Date())
 let timer: number | undefined
 onMounted(() => {
@@ -49,9 +56,9 @@ function fmt(n: number) {
         {{ now.toLocaleTimeString('zh-CN', { hour12: false }) }}
         <span class="date">{{ now.toLocaleDateString('zh-CN', { month: 'long', day: 'numeric', weekday: 'short' }) }}</span>
       </div>
-      <div class="status">
-        <span class="dot" :class="{ off: !store.connected }" />
-        {{ store.connected ? '实时数据已连接' : '数据连接中断' }}
+      <div class="status" :title="store.connectionError || undefined">
+        <span class="dot" :class="{ off: !store.connected, waiting: store.connectionState === 'connecting' || store.connectionState === 'reconnecting' }" />
+        {{ STATUS_TEXT[store.connectionState] }}
         <span class="sim">数据来源：自研模拟引擎（仿真数据）</span>
       </div>
       <button class="hud-btn" :class="{ on: store.hudOn }" @click="store.hudOn = !store.hudOn">性能 HUD</button>
@@ -165,6 +172,10 @@ function fmt(n: number) {
 .status .dot.off {
   background: #f0524d;
   animation: none;
+}
+.status .dot.waiting {
+  background: #e8b13c;
+  animation: pulse 1.6s infinite;
 }
 .status .sim {
   color: #4c5d6e;

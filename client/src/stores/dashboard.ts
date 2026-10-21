@@ -24,7 +24,7 @@ export interface NameValue {
   value: number
 }
 
-interface SnapshotMsg {
+export interface SnapshotMsg {
   type: 'snapshot'
   ts: number
   vehicleCount: number
@@ -37,7 +37,7 @@ interface SnapshotMsg {
   routeVolumes: NameValue[]
 }
 
-interface DeltaMsg {
+export interface DeltaMsg {
   type: 'delta'
   ts: number
   vehicles: number[]
@@ -53,6 +53,8 @@ interface DeltaMsg {
 export const useDashboardStore = defineStore('dashboard', {
   state: () => ({
     connected: false,
+    connectionState: 'connecting' as 'connecting' | 'connected' | 'reconnecting' | 'error' | 'idle',
+    connectionError: '',
     vehicleCount: 0,
     // 扁平数组 [lng, lat, status] * N，由推送整包替换引用（不在响应式里逐项改）
     vehicles: [] as number[],
@@ -112,7 +114,7 @@ export const useDashboardStore = defineStore('dashboard', {
       this.punctuality = msg.punctuality
       this.routeVolumes = msg.routeVolumes
       if (msg.events.length) {
-        this.events = [...msg.events.reverse(), ...this.events].slice(0, 30)
+        this.events = [...[...msg.events].reverse(), ...this.events].slice(0, 30)
       }
       this.lastDeltaKB = payloadKB
       this.latencyMs = Math.max(0, Date.now() - msg.ts)
@@ -127,6 +129,14 @@ export const useDashboardStore = defineStore('dashboard', {
     setView(v: 'china' | 'guangdong') {
       this.view = v
       this.mapVersion++
+    },
+    setConnectionState(
+      state: 'connecting' | 'connected' | 'reconnecting' | 'error' | 'idle',
+      error = '',
+    ) {
+      this.connectionState = state
+      this.connected = state === 'connected'
+      this.connectionError = error
     },
   },
 })
