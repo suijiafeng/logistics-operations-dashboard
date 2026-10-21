@@ -9,7 +9,7 @@ const store = useDashboardStore()
     <header class="panel-head">
       <span class="tick" />
       <h3>{{ title }}</h3>
-      <span v-if="extra" class="extra">{{ extra }}</span>
+      <span v-if="extra" class="extra" :title="extra">{{ extra }}</span>
     </header>
     <div class="panel-body" :class="{ pending: !store.hasData }" :aria-busy="store.dataStatus === 'loading'">
       <div class="panel-content" :inert="!store.hasData"><slot /></div>
@@ -21,41 +21,48 @@ const store = useDashboardStore()
 <style scoped>
 .panel {
   background: var(--color-panel);
+  border: 1px solid var(--color-track);
   border-radius: var(--radius-panel);
   display: flex;
   flex-direction: column;
   min-height: 0;
   min-width: 0;
 }
+/* 标题栏单行、高度固定：说明文字过长时省略，不换行挤压内容区 */
 .panel-head {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-3) var(--space-4) 0;
-  flex-wrap: wrap;
+  min-width: 0;
 }
 .panel-head .tick {
-  width: 4px;
+  width: 3px;
   height: 14px;
-  background: var(--color-accent);
+  background: var(--color-barLight);
   border-radius: 2px;
   flex: none;
 }
 .panel-head h3 {
+  flex: none;
   font-size: var(--font-title);
-  font-weight: 600;
+  font-weight: 500;
   color: var(--color-text);
-  letter-spacing: 1px;
+  white-space: nowrap;
 }
 .panel-head .extra {
   margin-left: auto;
+  min-width: 0;
   font-size: var(--font-small);
-  color: var(--color-secondary);
+  color: var(--color-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .panel-body {
   flex: 1;
   min-height: 0;
-  padding: var(--space-2) var(--space-4) var(--space-3);
+  padding: var(--space-3) var(--space-4) var(--space-3);
   display: flex;
   flex-direction: column;
   position: relative;
