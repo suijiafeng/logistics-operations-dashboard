@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Panel from './Panel.vue'
-import { useDashboardStore, type AnomalyEvent } from '../stores/dashboard'
+import { useDashboardStore } from '../stores/dashboard'
+import { useFocus } from '../services/useFocus'
 
 const store = useDashboardStore()
 const LEVEL_CLASS = ['lv0', 'lv1', 'lv2']
@@ -26,17 +27,8 @@ function measure() {
   if (height > 0 && stream.value) capacity.value = Math.max(0, Math.floor(stream.value.clientHeight / height))
 }
 
-// 窄屏下告警列表在地图下方：定位后若地图不在视口内，滚回地图，让定位结果与详情卡可见
-function locate(event: AnomalyEvent) {
-  store.locateEvent(event)
-  const map = document.querySelector('.map-wrap')
-  if (!map) return
-  const rect = map.getBoundingClientRect()
-  if (rect.top < 0 || rect.bottom > window.innerHeight) {
-    const smooth = !window.matchMedia('(prefers-reduced-motion: reduce)').matches && store.decorationsOn
-    map.scrollIntoView({ block: 'start', behavior: smooth ? 'smooth' : 'auto' })
-  }
-}
+// 定位后若地图不在视口内（窄屏），由统一入口滚回地图
+const { locateEvent: locate } = useFocus()
 
 // 新到的严重告警短暂高亮：首屏快照里的历史事件不算「新到」，避免一打开页面满屏闪
 const FRESH_MS = 8000
@@ -44,7 +36,17 @@ const fresh = ref(new Set<number>())
 const seen = new Set<number>()
 const freshTimers = new Set<number>()
 let primed = false
+let engine = store.engineId
+function resetFresh() {
+  for (const t of freshTimers) window.clearTimeout(t)
+  freshTimers.clear()
+  seen.clear()
+  fresh.value = new Set()
+  primed = false
+}
 watch(() => store.events, (events) => {
+  // 引擎重启后事件编号从头开始，旧编号不能再当「已见过」：去重集合、高亮与计时器一并重置，新引擎首批事件视作历史
+  if (store.engineId !== engine) { engine = store.engineId; resetFresh() }
   if (!primed) {
     for (const e of events) seen.add(e.id)
     primed = store.hasData
@@ -69,14 +71,15 @@ onMounted(() => {
   if (stream.value) observer.observe(stream.value)
   if (sample.value) observer.observe(sample.value)
 })
-onBeforeUnmount(() => { observer?.disconnect(); for (const t of freshTimers) window.clearTimeout(t) })
+onBeforeUnmount(() => { observer?.disconnect(); resetFresh() })
 </script>
 
 <template>
   <Panel title="异常告警" extra="全国 · 最新优先 · 点击定位">
     <div ref="stream" class="stream">
       <p v-if="store.hasData && store.events.length === 0" class="empty">本次连接暂无新事件。</p>
-      <TransitionGroup name="evt" tag="ul" class="list">
+      <!-- 显式时长：离场立即移除，否则高亮行的闪烁动画会被当作离场动画，被删掉的行残留数秒 -->
+      <TransitionGroup name="evt" tag="ul" class="list" :duration="{ enter: 350, leave: 0 }">
         <li v-for="e in visibleEvents" :key="e.id" class="item" role="button" tabindex="0" :class="{ active: store.activeEvent?.id === e.id, fresh: fresh.has(e.id) }"
           :aria-label="`${LEVEL_TEXT[e.level] ?? '提醒'}，${e.type}，${e.vehicle}，${e.place}，${e.desc}，点击定位事件线路和发生位置`"
           :title="`${e.type} · ${e.vehicle} · ${e.time}\n${e.place}\n${e.desc}`"
