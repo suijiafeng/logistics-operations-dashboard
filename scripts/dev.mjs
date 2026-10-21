@@ -31,18 +31,24 @@ function fail(code) {
 }
 
 const finished = (p) => p.exitCode !== null || p.signalCode !== null
+// 子进程及其整个进程组都退出才算结束：npm 包装进程先退、vite 等后代忽略 SIGTERM 时不能提前返回，否则端口仍被占着
+function gone(p) {
+  if (!finished(p)) return false
+  if (!grouped) return true
+  try { process.kill(-p.pid, 0); return false } catch { return true }
+}
 function shutdown() {
   if (shuttingDown) return
   shuttingDown = true
-  for (const p of procs) if (!finished(p)) kill(p, 'SIGTERM')
-  // 等全部子进程结束再退出，本次启动占用的端口随之释放；5 秒仍未结束则强杀
+  for (const p of procs) if (!gone(p)) kill(p, 'SIGTERM')
+  // 等全部进程组结束再退出，本次启动占用的端口随之释放；5 秒仍未结束则强杀整组
   const wait = () => {
-    if (procs.every(finished)) process.exit(exitCode)
+    if (procs.every(gone)) process.exit(exitCode)
     else setTimeout(wait, 100)
   }
   wait()
   setTimeout(() => {
-    for (const p of procs) if (!finished(p)) kill(p, 'SIGKILL')
+    for (const p of procs) if (!gone(p)) kill(p, 'SIGKILL')
     process.exit(exitCode)
   }, 5000).unref()
 }

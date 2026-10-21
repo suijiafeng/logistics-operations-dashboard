@@ -420,6 +420,14 @@ function serialHubs(full) {
   return HUBS.map((h) => ({ ...(full ? h : { id: h.id }), ...hubStats[h.id], ...history[h.id], routeOrders: routeOrdersFor(h.id) }))
 }
 
+/** 快照事件列表：全部未关闭告警 + 最近 60 条历史（含已关闭），新到旧；未关闭的不受 60 条窗口限制，否则待处理数与列表对不上 */
+function snapshotEvents() {
+  const byId = new Map()
+  for (const alert of state.alerts.values()) if (alert.status !== 'closed') byId.set(alert.id, alert)
+  for (const event of state.history) byId.set(event.id, event)
+  return [...byId.values()].sort((a, b) => b.id - a.id)
+}
+
 export function snapshot() {
   return {
     type: 'snapshot',
@@ -440,7 +448,7 @@ export function snapshot() {
     routeVolumes: routeVolumes(),
     // 全部干线今日单量（ROUTES 顺序），供地图按单量分级与线路详情使用；排行仍只取前 8
     routeOrders: [...metrics.routes],
-    events: state.history.slice(0, 60),
+    events: snapshotEvents(),
     alertStats: alertStats(),
   }
 }
@@ -465,17 +473,21 @@ export function eventCursor() {
 }
 
 /**
- * 补收：返回 id 大于 sinceEventId 的事件（旧到新），以及在此之前创建但 sinceUpdatedAt 之后有过状态变更的告警。
- * 事件列表只保留最近 60 条，若游标之前还有已被淘汰的事件则标记 truncated，由客户端提示历史不完整。
+ * 补收：从告警表取 id 大于 sinceEventId 的全部告警（旧到新，未关闭的不受 60 条窗口限制），以及在此之前创建但
+ * sinceUpdatedAt 之后有过状态变更的告警。告警表只保留已关闭不超过 1 小时的记录：游标之前还有已淘汰的事件时标记 truncated，
+ * 由客户端提示历史不完整。
  */
 export function catchUp(sinceEventId, sinceUpdatedAt) {
-  const events = state.history.filter((e) => e.id > sinceEventId).reverse()
-  const oldestKept = state.history.length ? state.history[state.history.length - 1].id : state.eventSeq + 1
-  const truncated = state.history.length >= 60 && sinceEventId + 1 < oldestKept
+  const events = []
   const alertUpdates = []
+  let oldestKept = state.eventSeq + 1
   for (const alert of state.alerts.values()) {
-    if (alert.id <= sinceEventId && alert.updatedAt >= sinceUpdatedAt) alertUpdates.push(alert)
+    if (alert.id < oldestKept) oldestKept = alert.id
+    if (alert.id > sinceEventId) events.push(alert)
+    else if (alert.updatedAt >= sinceUpdatedAt) alertUpdates.push(alert)
   }
+  events.sort((a, b) => a.id - b.id)
+  const truncated = sinceEventId + 1 < oldestKept
   return { type: 'catchup', engineId, ts: Date.now(), events, alertUpdates, truncated }
 }
 

@@ -11,11 +11,13 @@ export function useDisplayRuntime() {
   let tourStep = 0
   let wake: WakeHandle | null = null
   let acquiring = false
-  // 定时刷新去重：记录「日期 目标时刻」并写入 sessionStorage，刷新后的新页面在同一分钟内不会再次触发；
-  // 存储不可用时只靠内存，最多多刷新一次，不抛错
+  // 定时刷新去重：记录「日期 目标时刻」，写入 sessionStorage 并同时写到 window.name（同一标签页刷新后仍在，且不依赖存储权限），
+  // 刷新后的新页面在同一分钟内不会再次触发；两处都读不到时才退回内存，不抛错
   const REFRESH_KEY = 'logistics-refreshed-at'
+  const NAME_PREFIX = `${REFRESH_KEY}=`
   let refreshedAt = ''
   try { refreshedAt = sessionStorage.getItem(REFRESH_KEY) ?? '' } catch { refreshedAt = '' }
+  if (!refreshedAt && window.name.startsWith(NAME_PREFIX)) refreshedAt = window.name.slice(NAME_PREFIX.length)
   const params = new URLSearchParams(location.search)
   const refresh = params.get('refresh')
   async function acquireWake() {
@@ -78,7 +80,8 @@ export function useDisplayRuntime() {
       const stamp = `${day} ${time}`
       if (store.kioskOn && refresh && /^\d{2}:\d{2}$/.test(refresh) && time === refresh && stamp !== refreshedAt && idle > 30_000 && store.dataStatus === 'ready') {
         refreshedAt = stamp
-        try { sessionStorage.setItem(REFRESH_KEY, stamp) } catch { /* 存储不可用时退回内存去重 */ }
+        try { sessionStorage.setItem(REFRESH_KEY, stamp) } catch { /* 存储不可用时靠 window.name */ }
+        try { window.name = `${NAME_PREFIX}${stamp}` } catch { /* 极少数环境禁止写 name，退回内存去重 */ }
         location.reload()
       }
     }, 1000)
