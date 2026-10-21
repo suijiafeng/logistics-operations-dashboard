@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useDashboardStore } from '../stores/dashboard'
 import { HIGH_UTILIZATION } from '../design/tokens'
 import { ROUTES, hubById, GUANGDONG_HUB_IDS } from '../data/network'
@@ -20,6 +20,11 @@ const routes = computed(() => {
     .sort((x, y) => (y.orders ?? -1) - (x.orders ?? -1))
 })
 const hasRouteOrders = computed(() => routes.value.some((r) => r.orders != null))
+// 枢纽进出干线可达十几条：默认只列单量最高的几条，其余折叠，切换网点时收起
+const PEER_LIMIT = 6
+const showAllPeers = ref(false)
+watch(() => store.selectedHubId, () => { showAllPeers.value = false })
+const shownRoutes = computed(() => showAllPeers.value ? routes.value : routes.value.slice(0, PEER_LIMIT))
 const maxOrders = computed(() => Math.max(1, ...(hub.value?.recentOrders ?? [])))
 const metrics = computed(() => {
   const h = hub.value
@@ -87,9 +92,12 @@ function jump(id: string) {
     <section class="block">
       <h5>进出干线 · {{ routes.length }} 条{{ hasRouteOrders ? ' · 今日单量' : '' }}</h5>
       <div class="peers">
-        <button v-for="r in routes" :key="r.peer.id" class="peer"
+        <button v-for="r in shownRoutes" :key="r.peer.id" class="peer"
           :title="`${hub.name} ↔ ${r.peer.name}${r.orders != null ? ` · 今日 ${fmtInt(r.orders)} 单` : ''} · 点击查看${r.peer.name}网点`" @click="jump(r.peer.id)">
           <span class="peer-name">{{ hub.name }} ↔ {{ r.peer.name }}</span><b v-if="r.orders != null">{{ fmtCompact(r.orders) }}</b>
+        </button>
+        <button v-if="routes.length > PEER_LIMIT" class="more" :aria-expanded="showAllPeers" @click="showAllPeers = !showAllPeers">
+          {{ showAllPeers ? '收起' : `展开其余 ${routes.length - PEER_LIMIT} 条` }}
         </button>
       </div>
     </section>
@@ -202,5 +210,7 @@ h5 { font-size: 13px; font-weight: 500; color: var(--color-secondary); margin-bo
 .peer:hover { background: var(--color-hover); color: var(--color-heading); }
 .peer { display: inline-flex; align-items: center; gap: 6px; }
 .peer-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.more { min-height: 28px; padding: 0 8px; border: 0; background: none; color: var(--color-barLight); font-size: var(--font-small); cursor: pointer; border-radius: var(--radius-control); }
+.more:hover { background: var(--color-hover); }
 .peer b { flex: none; font-family: var(--font-number); font-weight: 600; color: var(--color-heading); font-variant-numeric: tabular-nums; }
 </style>
