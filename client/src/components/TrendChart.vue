@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { watch } from 'vue'
 import Panel from './Panel.vue'
-import { useEcharts, TEXT, ACCENT } from '../services/useEcharts'
+import { useEcharts, TEXT, ACCENT, TOOLTIP } from '../services/useEcharts'
+import { COLORS } from '../design/tokens'
+import { formatTrendTooltip } from '../services/formatTrendTooltip'
 import { useDashboardStore } from '../stores/dashboard'
 
 const store = useDashboardStore()
@@ -19,23 +21,22 @@ function render() {
   c.setOption({
     grid: { left: 8, right: 12, top: 22, bottom: 2, containLabel: true },
     tooltip: {
+      ...TOOLTIP,
       trigger: 'axis',
-      backgroundColor: '#131c26',
-      borderWidth: 0,
-      textStyle: { color: '#d7e2ec', fontSize: 12 },
+      formatter: (params: unknown) => formatTrendTooltip(params, store.trend, currentHour),
     },
     xAxis: {
       type: 'category',
       data: hours,
       boundaryGap: false,
-      axisLine: { lineStyle: { color: '#263646' } },
+      axisLine: { lineStyle: { color: COLORS.border } },
       axisTick: { show: false },
-      axisLabel: { ...TEXT, fontSize: 11, interval: 3 },
+      axisLabel: { ...TEXT, interval: 3 },
     },
     yAxis: {
       type: 'value',
-      splitLine: { lineStyle: { color: '#16222d' } },
-      axisLabel: { ...TEXT, fontSize: 11, formatter: (v: number) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : `${v}`) },
+      splitLine: { lineStyle: { color: COLORS.track } },
+      axisLabel: { ...TEXT, formatter: (v: number) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : `${v}`) },
     },
     series: [
       {
@@ -44,7 +45,7 @@ function render() {
         smooth: false,
         symbol: 'none',
         lineStyle: { color: ACCENT, width: 2 },
-        areaStyle: { color: 'rgba(255,138,61,0.13)' },
+        areaStyle: { color: COLORS.accentArea },
         data: completed,
       },
       {
@@ -62,7 +63,7 @@ function render() {
   })
 }
 
-watch(() => store.chartVersion, render)
+watch([chart, () => store.chartVersion], render)
 </script>
 
 <template>
