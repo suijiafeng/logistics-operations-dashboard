@@ -3,6 +3,7 @@
 // 内部步进 250ms，聚合 1s 后批量推送 delta；车辆位置用扁平数组编码（[lng, lat, status] * N），不用对象数组，减小包体。
 
 import { HUBS, ROUTES, hubById, pointOnRoute, routeLengthDeg } from './network.js'
+import { readMetrics, readModes, readHubHistory } from './metrics.js'
 
 export const VEHICLE_COUNT = 12000
 const STATUS = { EN_ROUTE: 0, DWELL: 1, ANOMALY: 2 }
@@ -36,6 +37,7 @@ for (let i = 0; i < VEHICLE_COUNT; i++) {
   const dir = Math.random() < 0.5 ? 1 : -1
   const dwelling = Math.random() < 0.06
   vehicles.push({
+    plate: `粤A·${String(10000 + i)}`,
     routeIdx,
     dir,
     t: dwelling ? (dir === 1 ? 0 : 1) : Math.random(),
@@ -60,55 +62,21 @@ for (const h of HUBS) {
   }
 }
 
-function businessTime() {
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', hourCycle: 'h23',
-  }).formatToParts(new Date())
-  const part = (type) => parts.find((p) => p.type === type).value
-  return { day: `${part('year')}-${part('month')}-${part('day')}`, hour: Number(part('hour')) }
-}
-
-const initialTime = businessTime()
+const engineId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+let metrics = readMetrics()
 const state = {
   tick: 0,
-  ordersToday: 0,
-  day: initialTime.day,
   onTimeRate: 97.8,
   pendingAnomalies: 0,
   events: [], // 待推送的异常事件
+  history: [],
   eventSeq: 0,
-  // 今日分时：历史为仿真基线，当前小时为部分累计，未来小时不生成数据。
-  trend: Array.from({ length: 24 }, (_, h) => {
-    if (h > initialTime.hour) return null
-    const peak = (h >= 8 && h <= 11) || (h >= 14 && h <= 17) || (h >= 20 && h <= 22)
-    const base = peak ? rand(9800, 14200) : h >= 0 && h <= 5 ? rand(900, 2600) : rand(4200, 8600)
-    return Math.floor(base * (h === initialTime.hour ? new Date().getUTCMinutes() / 60 : 1))
-  }),
-  modes: [
-    { name: '干线运输', value: 46 },
-    { name: '城市配送', value: 27 },
-    { name: '快递专线', value: 15 },
-    { name: '冷链运输', value: 12 },
-  ],
   punctuality: [
     { name: '准时送达', value: 82 },
     { name: '延误 <2h', value: 11 },
     { name: '延误 2–6h', value: 5 },
     { name: '延误 >6h', value: 2 },
   ],
-}
-state.ordersToday = state.trend.reduce((sum, value) => sum + (value ?? 0), 0)
-
-function syncBusinessDay() {
-  const current = businessTime()
-  if (state.day !== current.day) {
-    state.day = current.day
-    state.trend = Array(24).fill(null)
-    state.ordersToday = 0
-  }
-  for (let hour = 0; hour <= current.hour; hour++) state.trend[hour] ??= 0
-  return current.hour
 }
 
 const EVENT_TEMPLATES = [
@@ -123,16 +91,21 @@ function pushEvent(vehicle) {
   const [aId, bId] = ROUTES[vehicle.routeIdx]
   const [from, to] = vehicle.dir === 1 ? [aId, bId] : [bId, aId]
   const [type, desc] = pick(EVENT_TEMPLATES)
-  const plate = `粤${pick('ABCDEFGHJKLMNPRSTUV')}·${String(Math.floor(rand(10000, 99999)))}`
-  state.events.push({
+  const event = {
     id: ++state.eventSeq,
     time: new Date().toLocaleTimeString('zh-CN', { hour12: false, timeZone: 'Asia/Shanghai' }),
     type,
-    vehicle: plate,
+    vehicle: vehicle.plate,
+    fromId: from,
+    toId: to,
+    routeIndex: vehicle.routeIdx,
+    position: vehiclePos(vehicle),
     place: `${hubById[from].name} → ${hubById[to].name}`,
     desc: `${desc}${type === '延误' ? ` ${Math.floor(rand(20, 140))} 分钟` : ''}`,
     level: type === '车辆故障' ? 2 : type === '偏航' ? 1 : 0,
-  })
+  }
+  state.events.push(event)
+  state.history = [event, ...state.history].slice(0, 60)
   if (state.events.length > 60) state.events.splice(0, state.events.length - 60)
 }
 
@@ -143,7 +116,13 @@ function vehiclePos(v) {
 }
 
 export function step(dtMs) {
-  const hour = syncBusinessDay()
+  const nextMetrics = readMetrics()
+  if (nextMetrics.day !== metrics.day) {
+    for (const hub of Object.values(hubStats)) { hub.arrivals = 0; hub.departures = 0 }
+    state.events = []
+    state.history = []
+  }
+  metrics = nextMetrics
   const dt = dtMs / 1000
   state.tick++
   let activeAnomalies = 0
@@ -182,9 +161,6 @@ export function step(dtMs) {
       hs.arrivals++
       // 积压缓慢漂移并钳制在合理区间，避免长时间运行后数值失真
       hs.backlog = Math.min(3000, Math.max(0, hs.backlog + Math.floor(rand(-4, 5))))
-      const orders = Math.floor(rand(1, 4))
-      state.ordersToday += orders
-      state.trend[hour] += orders
       // 换线：新线路从到达 hub 出发，方向随线路定义调整
       const newRoute = nextRouteFrom(arrivedHub, v.routeIdx)
       v.routeIdx = newRoute
@@ -215,9 +191,6 @@ export function step(dtMs) {
       hs.utilization = Math.min(98, Math.max(30, hs.utilization + Math.floor(rand(-2, 3))))
       hs.onTime = Math.min(99.9, Math.max(90, hs.onTime + rand(-0.2, 0.2)))
     }
-    for (const m of state.modes) m.value = Math.max(5, m.value + Math.floor(rand(-1, 2)))
-    const sum = state.modes.reduce((s, m) => s + m.value, 0)
-    state.modes.forEach((m) => (m.value = Math.round((m.value / sum) * 100)))
   }
 }
 
@@ -233,33 +206,34 @@ function flatPositions() {
 }
 
 function routeVolumes() {
-  // 运量按幂分布生成，头部干线明显高于尾部，形态更接近真实网络
-  return ROUTES.map(([a, b]) => ({
+  return ROUTES.map(([a, b], index) => ({
+    id: `${a}-${b}`, fromId: a, toId: b,
     name: `${hubById[a].name} → ${hubById[b].name}`,
-    value: Math.floor(500 + Math.pow(Math.random(), 2.2) * 5400),
+    value: metrics.routes[index],
   }))
-    .sort((x, y) => y.value - x.value)
+    .sort((x, y) => y.value - x.value || x.id.localeCompare(y.id))
     .slice(0, 8)
 }
 
-let routeVolCache = routeVolumes()
-let routeVolAt = Date.now()
+function serialHubs(full) {
+  const history = readHubHistory()
+  return HUBS.map((h) => ({ ...(full ? h : { id: h.id }), ...hubStats[h.id], ...history[h.id] }))
+}
 
 export function snapshot() {
-  syncBusinessDay()
-  routeVolCache = routeVolumes()
-  routeVolAt = Date.now()
   return {
     type: 'snapshot',
+    engineId,
     ts: Date.now(),
     vehicleCount: VEHICLE_COUNT,
     vehicles: flatPositions(),
-    hubs: HUBS.map((h) => ({ ...h, ...hubStats[h.id] })),
+    hubs: serialHubs(true),
     kpi: kpi(),
-    trend: [...state.trend],
-    modes: state.modes.map((m) => ({ ...m })),
+    trend: [...metrics.trend],
+    modes: readModes(),
     punctuality: state.punctuality.map((p) => ({ ...p })),
-    routeVolumes: routeVolCache,
+    routeVolumes: routeVolumes(),
+    events: state.history.slice(0, 30),
   }
 }
 
@@ -272,30 +246,26 @@ function kpi() {
   }
   return {
     enRoute,
-    ordersToday: state.ordersToday,
+    ordersToday: metrics.ordersToday,
     onTimeRate: Math.round(state.onTimeRate * 10) / 10,
     pendingAnomalies: anomalies,
   }
 }
 
 export function delta() {
-  syncBusinessDay()
-  if (Date.now() - routeVolAt > 30_000) {
-    routeVolCache = routeVolumes()
-    routeVolAt = Date.now()
-  }
   const events = state.events
   state.events = []
   return {
     type: 'delta',
+    engineId,
     ts: Date.now(),
     vehicles: flatPositions(),
-    hubs: HUBS.map((h) => ({ id: h.id, ...hubStats[h.id] })),
+    hubs: serialHubs(false),
     kpi: kpi(),
-    trend: [...state.trend],
-    modes: state.modes.map((m) => ({ ...m })),
+    trend: [...metrics.trend],
+    modes: readModes(),
     punctuality: state.punctuality.map((p) => ({ ...p })),
-    routeVolumes: routeVolCache,
+    routeVolumes: routeVolumes(),
     events,
   }
 }
