@@ -57,6 +57,7 @@ for (let i = 0; i < VEHICLE_COUNT; i++) {
     status: dwelling ? STATUS.DWELL : STATUS.EN_ROUTE,
     dwellUntil: dwelling ? Math.floor(rand(4, 20)) * 4 : 0,
     anomalyUntil: 0,
+    alertId: 0,
   })
 }
 
@@ -75,6 +76,11 @@ for (const h of HUBS) {
 
 const engineId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 let metrics = readMetrics()
+// 告警生命周期：open（新建）→ acked（已确认）→ handling（处理中）→ closed（已关闭）；
+// 任何未关闭状态都可直接关闭。提醒级（level 0）在车辆恢复后由系统自动关闭，其余在恢复 10 分钟后仍无人处置也由系统关闭。
+export const ALERT_STATUS = ['open', 'acked', 'handling', 'closed']
+const AUTO_CLOSE_MS = 10 * 60_000
+const ALERT_RETAIN_MS = 60 * 60_000
 const state = {
   tick: 0,
   onTimeRate: 97.8,
@@ -82,6 +88,11 @@ const state = {
   events: [], // 待推送的异常事件
   history: [],
   eventSeq: 0,
+  /** 全部未过期告警：id → 事件对象（与 history 中同一引用） */
+  alerts: new Map(),
+  /** 本轮状态有变化的告警，随 delta 推送后清空 */
+  alertChanges: new Map(),
+  closedToday: [],
   punctuality: [
     { name: '准时送达', value: 82 },
     { name: '延误 <2h', value: 11 },
@@ -114,10 +125,78 @@ function pushEvent(vehicle) {
     place: `${hubById[from].name} → ${hubById[to].name}`,
     desc: `${desc}${type === '延误' ? ` ${Math.floor(rand(20, 140))} 分钟` : ''}`,
     level: type === '车辆故障' ? 2 : type === '偏航' ? 1 : 0,
+    // 处置字段：责任网点为目的网点（到站后由其接手），状态机见 ALERT_STATUS
+    status: 'open',
+    owner: to,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    recoveredAt: null,
+    closedAt: null,
+    closedBy: null,
   }
+  vehicle.alertId = event.id
+  state.alerts.set(event.id, event)
   state.events.push(event)
   state.history = [event, ...state.history].slice(0, 60)
   if (state.events.length > 60) state.events.splice(0, state.events.length - 60)
+}
+
+function closeAlert(alert, by, now = Date.now()) {
+  alert.status = 'closed'
+  alert.closedAt = now
+  alert.closedBy = by
+  alert.updatedAt = now
+  state.closedToday.push(alert)
+  state.alertChanges.set(alert.id, alert)
+}
+
+/** 处置告警：返回更新后的告警；非法 id 或非法流转返回 { error } */
+export function updateAlert(id, status, by = '大屏值班') {
+  const alert = state.alerts.get(Number(id))
+  if (!alert) return { error: 'alert_not_found' }
+  if (!ALERT_STATUS.includes(status)) return { error: 'invalid_status' }
+  if (alert.status === 'closed') return { error: 'already_closed' }
+  const from = ALERT_STATUS.indexOf(alert.status), to = ALERT_STATUS.indexOf(status)
+  // 只允许向前流转：下一步或直接关闭
+  if (!(to === from + 1 || status === 'closed')) return { error: 'invalid_transition' }
+  const now = Date.now()
+  if (status === 'closed') closeAlert(alert, by, now)
+  else { alert.status = status; alert.updatedAt = now; alert.handler = by; state.alertChanges.set(alert.id, alert) }
+  return { alert }
+}
+
+/** 车辆恢复后的告警收口：提醒级自动关闭，其余记录恢复时间等待人工处置 */
+function recoverAlert(vehicle, now) {
+  const alert = state.alerts.get(vehicle.alertId)
+  vehicle.alertId = 0
+  if (!alert || alert.status === 'closed') return
+  alert.recoveredAt = now
+  alert.updatedAt = now
+  if (alert.level === 0) closeAlert(alert, '系统 · 车辆已恢复', now)
+  else state.alertChanges.set(alert.id, alert)
+}
+
+function sweepAlerts(now) {
+  for (const alert of state.alerts.values()) {
+    if (alert.status !== 'closed' && alert.recoveredAt && now - alert.recoveredAt > AUTO_CLOSE_MS) closeAlert(alert, '系统 · 恢复后超时未处置', now)
+    if (alert.status === 'closed' && now - alert.closedAt > ALERT_RETAIN_MS) state.alerts.delete(alert.id)
+  }
+}
+
+/** 告警统计：按状态、级别计数，今日关闭数与人工处置平均时长（分钟） */
+export function alertStats() {
+  const byStatus = { open: 0, acked: 0, handling: 0 }
+  const byLevel = [0, 0, 0]
+  for (const alert of state.alerts.values()) {
+    if (alert.status === 'closed') continue
+    byStatus[alert.status]++
+    byLevel[alert.level]++
+  }
+  const manual = state.closedToday.filter((a) => !String(a.closedBy).startsWith('系统'))
+  const avgHandleMin = manual.length
+    ? Math.round(manual.reduce((sum, a) => sum + (a.closedAt - a.createdAt), 0) / manual.length / 60_000 * 10) / 10
+    : null
+  return { ...byStatus, byLevel, closedToday: state.closedToday.length, closedManual: manual.length, avgHandleMin }
 }
 
 function vehiclePos(v) {
@@ -148,6 +227,9 @@ export function step(dtMs) {
     for (const hub of Object.values(hubStats)) { hub.arrivals = 0; hub.departures = 0 }
     state.events = []
     state.history = []
+    state.alerts.clear()
+    state.alertChanges.clear()
+    state.closedToday = []
   }
   metrics = nextMetrics
   const dt = dtMs / 1000
@@ -167,6 +249,7 @@ export function step(dtMs) {
       if (now >= v.anomalyUntil) {
         v.status = STATUS.EN_ROUTE
         state.pendingAnomalies = Math.max(0, state.pendingAnomalies - 1)
+        recoverAlert(v, Date.now())
       }
       continue
     }
@@ -212,6 +295,7 @@ export function step(dtMs) {
   state.pendingAnomalies = Math.max(state.pendingAnomalies, activeAnomalies)
   // 准时率与仓配利用率缓慢游走
   if (state.tick % 4 === 0) {
+    sweepAlerts(Date.now())
     state.onTimeRate = Math.min(99.4, Math.max(95.8, state.onTimeRate + rand(-0.06, 0.06)))
     for (const h of HUBS) {
       const hs = hubStats[h.id]
@@ -271,28 +355,32 @@ export function snapshot() {
     routeVolumes: routeVolumes(),
     // 全部干线今日单量（ROUTES 顺序），供地图按单量分级与线路详情使用；排行仍只取前 8
     routeOrders: [...metrics.routes],
-    events: state.history.slice(0, 30),
+    events: state.history.slice(0, 60),
+    alertStats: alertStats(),
   }
 }
 
 function kpi() {
   let enRoute = 0
-  let anomalies = 0
-  for (const v of vehicles) {
-    if (v.status === STATUS.EN_ROUTE) enRoute++
-    if (v.status === STATUS.ANOMALY) anomalies++
-  }
+  for (const v of vehicles) if (v.status === STATUS.EN_ROUTE) enRoute++
+  // 待处理异常 = 未关闭的告警数（与同行控制塔口径一致），不再是当前异常车辆数
+  let pending = 0
+  for (const alert of state.alerts.values()) if (alert.status !== 'closed') pending++
   return {
     enRoute,
     ordersToday: metrics.ordersToday,
     onTimeRate: Math.round(state.onTimeRate * 10) / 10,
-    pendingAnomalies: anomalies,
+    pendingAnomalies: pending,
   }
 }
 
 export function delta() {
   const events = state.events
   state.events = []
+  // 本轮状态变化的告警（排除刚新建、已在 events 里的）
+  const fresh = new Set(events.map((e) => e.id))
+  const alertUpdates = [...state.alertChanges.values()].filter((a) => !fresh.has(a.id))
+  state.alertChanges.clear()
   return {
     type: 'delta',
     engineId,
@@ -307,5 +395,7 @@ export function delta() {
     routeVolumes: routeVolumes(),
     routeOrders: [...metrics.routes],
     events,
+    alertUpdates,
+    alertStats: alertStats(),
   }
 }

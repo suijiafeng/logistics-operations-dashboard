@@ -5,7 +5,7 @@ import { useEcharts, ACCENT, RED, TOOLTIP, TEXT } from '../services/useEcharts'
 import { COLORS, FONT } from '../design/tokens'
 import { useChartMotion } from '../services/useChartMotion'
 import { useMediaQuery } from '../services/useMediaQuery'
-import { useDashboardStore, LAYER_KEYS, type LayerKey } from '../stores/dashboard'
+import { useDashboardStore, LAYER_KEYS, ALERT_STATUS_TEXT, isAlertOpen, type LayerKey } from '../stores/dashboard'
 import { useFocus } from '../services/useFocus'
 import { fmtInt } from '../services/format'
 import { HUBS, ROUTES, hubById, hubsInProvince } from '../data/network'
@@ -20,7 +20,7 @@ const store = useDashboardStore()
 const { el, chart, onResized } = useEcharts()
 // 南海诸岛小图：独立实例，容器裁掉框外部分，只显示南海范围
 const { el: insetEl, chart: insetChart } = useEcharts()
-const { focusVehicle } = useFocus()
+const { focusVehicle, locateEvent } = useFocus()
 const motion = useChartMotion()
 const coarse = useMediaQuery('(pointer: coarse)')
 echarts.registerMap('china', chinaGeo as never)
@@ -69,6 +69,7 @@ const LAYER_ROWS: { key: LayerKey; label: string; dot: string }[] = [
   { key: 'anomaly', label: '异常', dot: 'anomaly' },
   { key: 'routes', label: '干线 · 粗细按单量', dot: 'route' },
   { key: 'hubs', label: '网点', dot: 'hub' },
+  { key: 'alerts', label: '告警 · 未关闭', dot: 'alert' },
 ]
 const legendTotal = computed(() => statusCounts.value[0] + statusCounts.value[1] + statusCounts.value[2])
 const drawerOpen = computed(() => store.hasData && (!!store.selectedHub || !!store.selectedPlate || store.selectedRouteIndex !== null))
@@ -288,6 +289,28 @@ function eventRouteData() {
   return index >= 0 ? [{ coords: routeCoords(index) }] : []
 }
 
+// 活动告警（未关闭）分级标记：严重用图钉、警告用菱形、提醒用小圆点；已确认 / 处理中降低不透明度表示有人接手
+const ALERT_SYMBOL = ['circle', 'diamond', 'pin']
+const ALERT_SIZE = [7, 10, 16]
+const ALERT_COLOR = [COLORS.secondary, COLORS.warning, RED]
+function alertMarkData() {
+  if (!store.layers.alerts) return []
+  return store.events.filter((e) => isAlertOpen(e) && e.position && e.id !== store.activeEvent?.id && inView(e.position[0], e.position[1]))
+    .map((e) => ({
+      name: e.vehicle, eventId: e.id, value: e.position,
+      symbol: ALERT_SYMBOL[e.level] ?? 'circle', symbolSize: ALERT_SIZE[e.level] ?? 7,
+      itemStyle: { color: ALERT_COLOR[e.level] ?? COLORS.secondary, opacity: e.status === 'open' ? 0.95 : 0.55, borderColor: COLORS.canvas, borderWidth: 1 },
+    }))
+}
+const alertOpenCount = computed(() => store.events.filter(isAlertOpen).length)
+
+function alertTooltip(p: { data?: { eventId?: number } }) {
+  const e = store.events.find((item) => item.id === p.data?.eventId)
+  if (!e) return ''
+  const owner = e.owner ? hubById[e.owner]?.name ?? e.owner : ''
+  return `${['提醒', '警告', '严重'][e.level] ?? ''} · ${e.type} · ${e.vehicle}<br/>${e.place}${owner ? ` · 责任 ${owner}` : ''}<br/>${ALERT_STATUS_TEXT[e.status ?? 'open']}${e.recoveredAt ? ' · 车辆已恢复' : ''} · 点击定位并处置`
+}
+
 function eventPositionData() {
   const event = store.activeEvent
   if (!event?.position || !inView(event.position[0], event.position[1])) return []
@@ -354,6 +377,7 @@ function updateSelection() {
     { id: 'prd-cluster', data: clusterData() },
     { id: 'event-route', data: eventRouteData() },
     { id: 'event-position', data: eventPositionData() },
+    { id: 'alert-marks', data: alertMarkData() },
     { id: 'vehicle-route', data: vehicleRouteData() },
     { id: 'vehicle-focus', data: vehicleFocusData() },
     { id: 'route-focus', data: routeFocusData() },
@@ -485,6 +509,12 @@ function baseOption() {
         id: 'event-route', type: 'lines', coordinateSystem: 'geo', zlevel: 5,
         polyline: true, silent: true, lineStyle: { color: COLORS.dangerText, width: 3, opacity: 1 },
         data: eventRouteData(),
+      },
+      {
+        // 活动告警标记：按级别分形状与颜色，点击定位该事件
+        id: 'alert-marks', type: 'scatter', coordinateSystem: 'geo', zlevel: 5, z: 3,
+        emphasis: { scale: 1.3 }, tooltip: { formatter: alertTooltip },
+        data: alertMarkData(),
       },
       {
         id: 'event-position', type: 'scatter', coordinateSystem: 'geo', zlevel: 6,
@@ -638,6 +668,9 @@ watch(chart, (c) => {
     } else if (seriesId === 'hubs' || seriesId === 'hub-hit') {
       const hubId = (params.data as { hubId?: string })?.hubId
       if (hubId) { store.selectHub(hubId); consumed = true }
+    } else if (seriesId === 'alert-marks') {
+      const event = store.events.find((item) => item.id === (params.data as { eventId?: number })?.eventId)
+      if (event) { locateEvent(event); consumed = true }
     } else if (seriesId.startsWith('veh-')) {
       const index = (params.data as number[] | undefined)?.[2]
       if (typeof index === 'number') { focusVehicle(plateOf(index)); consumed = true }
@@ -682,6 +715,8 @@ onBeforeUnmount(() => {
 })
 
 watch([() => store.selectedHubId, () => store.activeEvent, () => store.selectedPlate, () => store.vehicle, coarse], updateSelection)
+// 告警到达 / 处置 / 关闭时刷新地图标记（事件列表引用变化即触发）
+watch(() => store.events, () => { if (chart.value) chart.value.setOption({ series: [{ id: 'alert-marks', data: alertMarkData() }] }) })
 // 选中干线：线路淡出 / 高亮与线外车辆淡化一起更新；单量分级变化（跨四分位）时重画线路
 watch(() => store.selectedRouteIndex, () => { updateSelection(); scheduleVehicleRender() })
 watch(gradeKey, () => { if (store.hasData) updateSelection() })
@@ -751,6 +786,7 @@ watch(
             <b v-else-if="row.key === 'dwell'">{{ fmtInt(statusCounts[1]) }}</b>
             <b v-else-if="row.key === 'anomaly'">{{ fmtInt(statusCounts[2]) }}</b>
             <b v-else-if="row.key === 'routes'">{{ routesInView().length }} 条</b>
+            <b v-else-if="row.key === 'alerts'">{{ alertOpenCount }} 起</b>
             <b v-else>{{ visibleHubs().length }} 个</b>
           </button>
         </li>
@@ -907,6 +943,7 @@ watch(
 .dot.anomaly { background: var(--color-danger); }
 .dot.route { width: 12px; height: 2px; border-radius: 1px; background: var(--color-barLight); }
 .dot.hub { background: var(--color-secondary); border: 1px solid var(--color-heading); }
+.dot.alert { width: 0; height: 0; border-radius: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 9px solid var(--color-danger); background: none; }
 @media (max-width: 767px) {
   .map-legend { bottom: var(--space-2); left: var(--space-2); }
   .search { width: 160px; }

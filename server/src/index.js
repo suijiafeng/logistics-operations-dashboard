@@ -3,7 +3,7 @@
 import http from 'node:http'
 import zlib from 'node:zlib'
 import { WebSocketServer } from 'ws'
-import { step, snapshot, delta, vehicleDetail } from './engine.js'
+import { step, snapshot, delta, vehicleDetail, updateAlert, ALERT_STATUS } from './engine.js'
 
 const PORT = process.env.PORT || 8787
 const configuredMaxBuffered = Number(process.env.WS_MAX_BUFFERED_BYTES || 1_000_000)
@@ -11,8 +11,38 @@ const MAX_BUFFERED_BYTES = Number.isFinite(configuredMaxBuffered) && configuredM
   ? configuredMaxBuffered
   : 1_000_000
 
+function readJson(req, limit = 4096) {
+  return new Promise((resolve, reject) => {
+    let body = ''
+    req.on('data', (chunk) => { body += chunk; if (body.length > limit) { reject(new Error('body_too_large')); req.destroy() } })
+    req.on('end', () => { try { resolve(body ? JSON.parse(body) : {}) } catch (error) { reject(error) } })
+    req.on('error', reject)
+  })
+}
+
 const server = http.createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+  if (req.method === 'OPTIONS') { res.statusCode = 204; res.end(); return }
+  // 告警处置：POST /alerts/:id/status  { status: 'acked' | 'handling' | 'closed', by?: string }；变更随下一包 delta 广播给所有大屏
+  const alertMatch = req.method === 'POST' && req.url?.match(/^\/alerts\/(\d+)\/status$/)
+  if (alertMatch) {
+    readJson(req).then((body) => {
+      res.setHeader('Content-Type', 'application/json')
+      const status = typeof body.status === 'string' ? body.status : ''
+      const by = typeof body.by === 'string' && body.by.trim() ? body.by.trim().slice(0, 32) : '大屏值班'
+      if (!ALERT_STATUS.includes(status)) { res.statusCode = 400; res.end(JSON.stringify({ error: 'invalid_status' })); return }
+      const result = updateAlert(alertMatch[1], status, by)
+      if (result.error) { res.statusCode = result.error === 'alert_not_found' ? 404 : 409; res.end(JSON.stringify(result)); return }
+      res.end(JSON.stringify({ alert: result.alert, ts: Date.now() }))
+    }).catch(() => {
+      res.statusCode = 400
+      res.setHeader('Content-Type', 'application/json')
+      res.end(JSON.stringify({ error: 'invalid_body' }))
+    })
+    return
+  }
   if (req.url === '/snapshot') {
     try {
       const body = JSON.stringify(snapshot())

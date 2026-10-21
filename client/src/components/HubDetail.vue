@@ -6,14 +6,18 @@ import { HIGH_UTILIZATION } from '../design/tokens'
 import { ROUTES, hubById } from '../data/network'
 import { provinceName } from '../data/provinces'
 import { fmtCompact, fmtInt } from '../services/format'
+import { ALERT_STATUS_TEXT, isAlertOpen } from '../stores/dashboard'
 
 const BACKLOG_WARN = 650
 const LEVEL_TEXT = ['', '一级枢纽', '二级枢纽', '三级网点']
 const store = useDashboardStore()
 const { focusHub, locateEvent } = useFocus()
 const hub = computed(() => store.selectedHub)
+// 相关告警：未关闭优先，责任网点为本网点的排前面
 const relatedEvents = computed(() => store.events.filter((event) => hub.value &&
-  (event.fromId === hub.value.id || event.toId === hub.value.id || event.place.includes(hub.value.name))).slice(0, 3))
+  (event.owner === hub.value.id || event.fromId === hub.value.id || event.toId === hub.value.id || event.place.includes(hub.value.name)))
+  .sort((a, b) => Number(isAlertOpen(b)) - Number(isAlertOpen(a)) || Number(b.owner === hub.value?.id) - Number(a.owner === hub.value?.id) || b.id - a.id).slice(0, 3))
+const ownedOpen = computed(() => store.events.filter((event) => event.owner === hub.value?.id && isAlertOpen(event)).length)
 // 进出干线：有今日单量时按单量降序，单量与底部线路排行同一份累计
 const routes = computed(() => {
   const h = hub.value
@@ -84,10 +88,11 @@ function jump(id: string) {
     </section>
 
     <section v-if="relatedEvents.length" class="block">
-      <h5>相关告警 · {{ relatedEvents.length }}</h5>
+      <h5>相关告警 · {{ relatedEvents.length }}{{ ownedOpen ? ` · 本网点待处置 ${ownedOpen}` : '' }}</h5>
       <button v-for="event in relatedEvents" :key="event.id" class="event-link" :title="`${event.type} · ${event.place} · ${event.desc}`" @click="locateEvent(event)">
         <i class="sev" :class="LEVEL_DOT[event.level] ?? 'lv0'" />
         <span class="ev-main"><b>{{ event.type }}</b><span>{{ event.place }}</span></span>
+        <span v-if="event.status" class="chip" :class="`st-${event.status}`">{{ ALERT_STATUS_TEXT[event.status] }}</span>
         <time>{{ event.time }}</time>
       </button>
     </section>
@@ -194,6 +199,9 @@ h5 { font-size: 13px; font-weight: 500; color: var(--color-secondary); margin-bo
 .ev-main b { flex: none; font-weight: 500; color: var(--color-heading); }
 .ev-main span { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--color-secondary); }
 .event-link time { flex: none; font-family: var(--font-number); font-size: 11px; color: var(--color-tertiary); }
+.chip { flex: none; padding: 0 6px; border-radius: 8px; font-size: 10px; line-height: 15px; background: var(--color-elevated); color: var(--color-secondary); }
+.chip.st-handling { color: var(--color-warning); }
+.chip.st-closed { color: var(--color-tertiary); }
 
 .peers { display: flex; flex-wrap: wrap; gap: 6px; }
 .peer {

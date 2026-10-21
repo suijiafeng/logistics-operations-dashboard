@@ -3,11 +3,12 @@ import type { Hub } from '../data/network'
 import { HUBS, ROUTES, hubById } from '../data/network'
 import { provinceName } from '../data/provinces'
 import { statusOf, routeOf, type VehicleDetail } from '../services/vehicles'
+import { postAlertStatus } from '../services/alerts'
 
-export type LayerKey = 'routes' | 'enroute' | 'dwell' | 'anomaly' | 'hubs'
-export const LAYER_KEYS: LayerKey[] = ['routes', 'enroute', 'dwell', 'anomaly', 'hubs']
+export type LayerKey = 'routes' | 'enroute' | 'dwell' | 'anomaly' | 'hubs' | 'alerts'
+export const LAYER_KEYS: LayerKey[] = ['routes', 'enroute', 'dwell', 'anomaly', 'hubs', 'alerts']
 function loadLayers(): Record<LayerKey, boolean> {
-  const layers = { routes: true, enroute: true, dwell: true, anomaly: true, hubs: true }
+  const layers = { routes: true, enroute: true, dwell: true, anomaly: true, hubs: true, alerts: true }
   try {
     const saved = JSON.parse(localStorage.getItem('logistics-layers') || '{}') as Partial<Record<LayerKey, boolean>>
     for (const key of LAYER_KEYS) if (typeof saved[key] === 'boolean') layers[key] = saved[key]!
@@ -22,6 +23,10 @@ export interface Kpi {
   pendingAnomalies: number
 }
 
+export const ALERT_STATUS = ['open', 'acked', 'handling', 'closed'] as const
+export type AlertStatus = typeof ALERT_STATUS[number]
+export const ALERT_STATUS_TEXT: Record<AlertStatus, string> = { open: '新建', acked: '已确认', handling: '处理中', closed: '已关闭' }
+
 export interface AnomalyEvent {
   id: number
   time: string
@@ -34,7 +39,27 @@ export interface AnomalyEvent {
   toId?: string
   routeIndex?: number
   position?: [number, number]
+  /** 处置字段（引擎 0.3+）：状态机 open → acked → handling → closed，责任网点为目的网点 */
+  status?: AlertStatus
+  owner?: string
+  handler?: string
+  createdAt?: number
+  updatedAt?: number
+  recoveredAt?: number | null
+  closedAt?: number | null
+  closedBy?: string | null
 }
+
+export interface AlertStats {
+  open: number
+  acked: number
+  handling: number
+  byLevel: [number, number, number]
+  closedToday: number
+  closedManual: number
+  avgHandleMin: number | null
+}
+export function isAlertOpen(event: AnomalyEvent) { return event.status !== 'closed' }
 
 export interface NameValue {
   id?: string
@@ -59,6 +84,7 @@ export interface SnapshotMsg {
   punctuality: NameValue[]
   routeVolumes: NameValue[]
   routeOrders?: number[]
+  alertStats?: AlertStats
 }
 
 export interface DeltaMsg {
@@ -75,6 +101,8 @@ export interface DeltaMsg {
   routeVolumes: NameValue[]
   routeOrders?: number[]
   events: AnomalyEvent[]
+  alertUpdates?: AnomalyEvent[]
+  alertStats?: AlertStats
 }
 
 function countFleet(flat: number[]): [number, number, number][] {
@@ -117,6 +145,11 @@ export const useDashboardStore = defineStore('dashboard', {
     /** 每条干线当前车辆数 [在途, 装卸, 异常]，由扁平数组解码统计 */
     routeFleet: [] as [number, number, number][],
     events: [] as AnomalyEvent[],
+    alertStats: null as AlertStats | null,
+    /** 告警面板筛选：待处理（未关闭）/ 全部 */
+    alertFilter: 'pending' as 'pending' | 'all',
+    /** 正在提交处置的告警 id，防止重复点击 */
+    alertBusy: new Set<number>(),
     selectedHubId: null as string | null,
     activeEvent: null as AnomalyEvent | null,
     /** 选中追踪的车牌；详情由 /vehicles/:plate 轮询，位置在增量包里按下标读取 */
@@ -188,6 +221,7 @@ export const useDashboardStore = defineStore('dashboard', {
       this.punctuality = msg.punctuality
       this.routeVolumes = msg.routeVolumes
       if (msg.routeOrders) this.routeOrders = msg.routeOrders
+      if (msg.alertStats) this.alertStats = msg.alertStats
       if (msg.events) this.mergeEvents(msg.events)
       this.mapVersion++
       this.chartVersion++
@@ -212,7 +246,8 @@ export const useDashboardStore = defineStore('dashboard', {
       this.punctuality = msg.punctuality
       this.routeVolumes = msg.routeVolumes
       if (msg.routeOrders) this.routeOrders = msg.routeOrders
-      this.mergeEvents(msg.events)
+      if (msg.alertStats) this.alertStats = msg.alertStats
+      this.mergeEvents(msg.alertUpdates ? [...msg.events, ...msg.alertUpdates] : msg.events)
       this.lastDeltaKB = payloadKB
       this.latencyMs = Math.max(0, Date.now() - msg.ts)
       this.lastDeltaAt = Date.now()
@@ -267,8 +302,27 @@ export const useDashboardStore = defineStore('dashboard', {
       }
     },
     mergeEvents(events: AnomalyEvent[]) {
+      // 后到的同 id 对象覆盖先前的（处置更新），再按新到旧截到 60 条
       const all = new Map([...this.events, ...events].map((event) => [event.id, event]))
       this.events = [...all.values()].sort((a, b) => b.id - a.id).slice(0, 60)
+      if (this.activeEvent) {
+        const latest = all.get(this.activeEvent.id)
+        if (latest && latest !== this.activeEvent) this.activeEvent = { ...this.activeEvent, ...latest }
+      }
+    },
+    /** 告警处置：调引擎接口，成功后立即合并返回的告警，其他大屏由下一包 delta 同步 */
+    async setAlertStatus(id: number, status: AlertStatus) {
+      if (this.alertBusy.has(id)) return
+      this.alertBusy = new Set(this.alertBusy).add(id)
+      try {
+        const alert = await postAlertStatus(id, status)
+        this.mergeEvents([alert])
+        this.notify(`${alert.type} · ${alert.vehicle}：${ALERT_STATUS_TEXT[alert.status ?? 'open']}`)
+      } catch (error) {
+        this.notify(`处置失败：${(error as Error).message}`)
+      } finally {
+        const next = new Set(this.alertBusy); next.delete(id); this.alertBusy = next
+      }
     },
     notify(message: string) { this.notice = message; this.noticeAt = Date.now() },
     locateEvent(event: AnomalyEvent) {

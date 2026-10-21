@@ -1,4 +1,4 @@
-import { useDashboardStore, type DeltaMsg, type SnapshotMsg } from '../stores/dashboard'
+import { useDashboardStore, ALERT_STATUS, type AlertStatus, type DeltaMsg, type SnapshotMsg } from '../stores/dashboard'
 import { ROUTES } from '../data/network'
 
 // 数据链路：先 HTTP 拉全量快照（12,000 台车辆位置 + 全部统计），再连 WebSocket 收 1 秒聚合的增量包
@@ -48,6 +48,19 @@ function validHub(h: unknown, full: boolean) {
     optional(h.routeOrders, o => isRecord(o) && Object.values(o).every(n => finite(n) && n >= 0))
 }
 
+const nullable = (v: unknown, check: (v: unknown) => boolean) => v === null || check(v)
+// 告警事件：基础字段必填，处置字段可选（旧引擎不带）；状态只接受四个合法值
+function validEvent(e: unknown) {
+  return isRecord(e) && finite(e.id) &&
+    ['time', 'type', 'vehicle', 'place', 'desc'].every(k => isString(e[k])) && finite(e.level) &&
+    ['fromId', 'toId', 'owner', 'handler'].every(k => optional(e[k], isString)) && optional(e.routeIndex, isRouteIndex) &&
+    optional(e.position, p => Array.isArray(p) && p.length === 2 && p.every(finite)) &&
+    optional(e.status, s => ALERT_STATUS.includes(s as AlertStatus)) &&
+    ['createdAt', 'updatedAt'].every(k => optional(e[k], finite)) &&
+    ['recoveredAt', 'closedAt'].every(k => optional(e[k], v => nullable(v, finite))) &&
+    optional(e.closedBy, v => nullable(v, isString))
+}
+
 // 线路下标必须是有效整数下标：0.5、-1、越界值都会让地图取不到线路
 const isRouteIndex = (n: unknown) => typeof n === 'number' && Number.isInteger(n) && n >= 0 && n < ROUTES.length
 
@@ -60,10 +73,10 @@ function validStats(value: Record<string, unknown>, fullHubs: boolean) {
     ['modes', 'punctuality', 'routeVolumes'].every(k => named(value[k])) &&
     optional(value.routeOrders, items => Array.isArray(items) && items.length === ROUTES.length && items.every(n => finite(n) && n >= 0)) &&
     Array.isArray(value.hubs) && value.hubs.every(h => validHub(h, fullHubs)) &&
-    (events === undefined || Array.isArray(events) && events.every(e => isRecord(e) && finite(e.id) &&
-      ['time', 'type', 'vehicle', 'place', 'desc'].every(k => isString(e[k])) && finite(e.level) &&
-      ['fromId', 'toId'].every(k => optional(e[k], isString)) && optional(e.routeIndex, isRouteIndex) &&
-      optional(e.position, p => Array.isArray(p) && p.length === 2 && p.every(finite))))
+    (events === undefined || Array.isArray(events) && events.every(validEvent)) &&
+    optional(value.alertUpdates, items => Array.isArray(items) && items.every(validEvent)) &&
+    optional(value.alertStats, s => isRecord(s) && ['open', 'acked', 'handling', 'closedToday', 'closedManual'].every(k => finite(s[k]) && (s[k] as number) >= 0) &&
+      (s.avgHandleMin === null || finite(s.avgHandleMin)) && Array.isArray(s.byLevel) && s.byLevel.length === 3 && s.byLevel.every(finite))
 }
 
 function isSnapshotMsg(value: unknown): value is SnapshotMsg {
