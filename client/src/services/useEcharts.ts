@@ -36,7 +36,8 @@ export function useEcharts(): { el: Ref<HTMLDivElement | null>; chart: ShallowRe
     chart.value = null
     dpr = currentDpr()
     const instance = echarts.init(el.value, undefined, { renderer: 'canvas', devicePixelRatio: dpr })
-    if (option) instance.setOption(option)
+    // 回放旧 option 只是为了减少闪烁；失败不能让实例丢失，使用方会在 chart 变化时重新 setOption
+    if (option) { try { instance.setOption(option) } catch (error) { console.warn('图表重建时回放旧配置失败，等待使用方重绘', error) } }
     chart.value = instance
     store.renderDpr = dpr
     syncMotion()

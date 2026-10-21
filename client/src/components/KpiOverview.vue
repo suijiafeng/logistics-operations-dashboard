@@ -58,10 +58,17 @@ dd { display: flex; align-items: baseline; gap: var(--space-1); min-width: 0; ma
 }
 .value.alert { color: var(--color-danger); }
 small { flex: none; font-size: var(--font-body); color: var(--color-tertiary); }
-/* 矮屏：卡片收紧，把高度让给分时柱图 */
-@media (max-height: 820px) {
-  .tile { padding: 4px 12px 6px; }
+/* 紧凑布局（1600 宽以下或 980 高以下）：卡片收紧，把高度让给运单链路与分时柱图；矮屏再收一档 */
+@media (max-width: 1599px), (max-height: 980px) {
+  .tile { padding: 6px 12px 6px; }
   dt { font-size: var(--font-small); }
-  .value { font-size: 20px; font-size: clamp(16px, 12cqw, 20px); }
+  .value { font-size: 22px; font-size: clamp(16px, 13cqw, 22px); }
+}
+@media (max-height: 820px) {
+  .grid { gap: 4px; }
+  .tile { padding: 2px 10px 3px; }
+  dt { font-size: 11px; line-height: 1.3; }
+  .value { font-size: 18px; font-size: clamp(15px, 11cqw, 18px); }
+  small { font-size: var(--font-small); }
 }
 </style>

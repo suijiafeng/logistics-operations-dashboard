@@ -50,6 +50,9 @@ let feedTimer: number | undefined
 let transitionTimer: number | undefined
 let buildVersion = 0
 let disposed = false
+// 基础 option（geo + 全部 series）是否已设置到当前实例：之前局部 setOption 若抢在它前面，
+// 会生成没有 map 名的 geo 组件，生产包里 ECharts 直接抛错并让实例作废（首包快照早于路线分块到达时必现）
+let ready = false
 const switching = ref(false)
 // 图例计数：统计当前视图内全部车辆（不受画质抽稀和图层开关影响）
 const statusCounts = ref<[number, number, number]>([0, 0, 0])
@@ -146,7 +149,7 @@ const VEHICLE_SERIES_IDS = ['veh-0', 'veh-1', 'veh-2', 'veh-dim']
 
 function renderVehicles(limit = Number.POSITIVE_INFINITY) {
   const c = chart.value
-  if (!c) return
+  if (!c || !ready) return
   const groups = vehicleSeriesData(limit)
   store.renderedVehicles = groups.reduce((sum, group) => sum + group.length, 0)
   // 增量更新：只替换三组车辆散点与追踪标记的数据，不重建整个 option
@@ -394,7 +397,7 @@ function geoTooltip(p: { name: string }) {
 
 function updateSelection() {
   const c = chart.value
-  if (!c) return
+  if (!c || !ready) return
   c.dispatchAction({ type: 'hideTip' })
   c.setOption({ geo: geoLayout(), series: [
     { id: 'lines', data: linesData() },
@@ -582,6 +585,7 @@ async function rebuildMap() {
   const c = chart.value
   if (!c) return
   const version = ++buildVersion
+  ready = false
   switching.value = true
   mapError.value = ''
   window.clearTimeout(feedTimer)
@@ -593,6 +597,7 @@ async function rebuildMap() {
     region = loaded
     if (loaded) ASPECT[view] = loaded.aspect
     c.setOption(baseOption(), { notMerge: true })
+    ready = true
     progressiveFeed()
     updateSelection()
   } catch (error) {
@@ -738,7 +743,7 @@ watch(insetChart, (c) => {
 }, { flush: 'post' })
 
 // 地图布局用的是画布像素坐标，不会随 resize 自动更新：等图表实例按新尺寸 resize 完成后再重算
-onResized(() => chart.value?.setOption({ geo: geoLayout() }))
+onResized(() => { if (ready) chart.value?.setOption({ geo: geoLayout() }) })
 
 onBeforeUnmount(() => {
   disposed = true
@@ -752,7 +757,7 @@ watch([() => store.selectedHubId, () => store.activeEvent, () => store.selectedP
 // 尾迹拉取完成 / 回放开关切换时重画尾迹与标记
 watch([() => store.trail, () => store.playback.on], () => { updateSelection(); scheduleVehicleRender() })
 // 告警到达 / 处置 / 关闭时刷新地图标记（事件列表引用变化即触发）
-watch(() => store.events, () => { if (chart.value) chart.value.setOption({ series: [{ id: 'alert-marks', data: alertMarkData() }] }) })
+watch(() => store.events, () => { if (chart.value && ready) chart.value.setOption({ series: [{ id: 'alert-marks', data: alertMarkData() }] }) })
 // 选中干线：线路淡出 / 高亮与线外车辆淡化一起更新；单量分级变化（跨四分位）时重画线路
 watch(() => store.selectedRouteIndex, () => { updateSelection(); scheduleVehicleRender() })
 watch(gradeKey, () => { if (store.hasData) updateSelection() })

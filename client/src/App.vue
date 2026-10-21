@@ -50,8 +50,8 @@ onMounted(() => {
   } catch { store.hudOn = hud === '1' }
   window.addEventListener('keydown', onKey)
   startDataFeed()
-  // 开发模式调试钩子：方便用无头浏览器验收下钻/网点详情等交互状态
-  if (import.meta.env.DEV) {
+  // 调试钩子：开发模式或 URL 带 ?debug=1 时暴露 store，供无头浏览器验收脚本切换下钻 / 网点详情等状态
+  if (import.meta.env.DEV || new URLSearchParams(location.search).get('debug') === '1') {
     ;(window as unknown as Record<string, unknown>).__dashboard = store
   }
 })
@@ -213,8 +213,8 @@ button:focus-visible, [role='button']:focus-visible {
 @media (max-width: 1599px), (max-height: 980px) {
   .screen { grid-template-rows: auto minmax(520px, 1fr) 168px; }
   .middle { grid-template-columns: 340px minmax(0, 1fr) 340px; }
-  .left { grid-template-rows: auto auto minmax(150px, 1fr) 220px; }
-  .right { grid-template-rows: minmax(0, 1fr) 220px; }
+  .left { grid-template-rows: auto auto minmax(130px, 1fr) 172px; }
+  .right { grid-template-rows: minmax(0, 1fr) 200px; }
   .bottom { grid-template-columns: minmax(0, 1fr) 520px; }
 }
 /* 矮屏（如 1366×768 笔记本）：正常状态一屏放下；出现数据提示条时允许少量滚动，不压缩图表可读高度 */
@@ -223,8 +223,8 @@ button:focus-visible, [role='button']:focus-visible {
   .middle, .col, .bottom { gap: var(--space-2); }
   /* 中间三列不以内容撑高（告警条数随高度变化，避免互相放大），行高只取最小值与剩余空间 */
   .middle > * { contain: size; }
-  .left { grid-template-rows: auto auto minmax(150px, 1fr) 176px; }
-  .right { grid-template-rows: minmax(0, 1fr) 176px; }
+  .left { grid-template-rows: auto auto minmax(90px, 1fr) 140px; }
+  .right { grid-template-rows: minmax(0, 1fr) 160px; }
 }
 /* 放大模式下逻辑高度为 1080，逻辑宽 ≥ 2400 等价于宽高比 ≥ 20/9（媒体查询只看物理 CSS 尺寸）。
    宽屏规则都排除 fit-contain：媒体查询看的是视口，而 contain 的内容宽固定 ≤1920，应沿用 1920 布局 */

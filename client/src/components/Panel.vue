@@ -70,4 +70,10 @@ const store = useDashboardStore()
 .panel-content { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
 .pending .panel-content { visibility: hidden; }
 .placeholder { position: absolute; inset: var(--space-4); color: var(--color-secondary); font-size: var(--font-body); }
+/* 矮屏（如 1366×768）：面板头部与内边距各收 8px，左列四个面板合计省出约 60px 给图表 */
+@media (max-height: 820px) and (min-width: 1280px) {
+  .panel-head { padding: 8px var(--space-3) 0; }
+  .panel-head h3 { font-size: var(--font-body); }
+  .panel-body { padding: 8px var(--space-3) 8px; }
+}
 </style>

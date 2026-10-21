@@ -35,5 +35,6 @@ const max = computed(() => Math.max(1, ...store.topHubs.map(total)))
   --rank-name-width: 7em;
 }
 .list :deep(.rank-row) { cursor: pointer; }
-@media (max-height: 820px) { .list { --rank-row-height: 22px; } }
+@media (max-width: 1599px), (max-height: 980px) { .list { --rank-row-height: 22px; } }
+@media (max-height: 820px) { .list { --rank-row-height: 18px; } }
 </style>

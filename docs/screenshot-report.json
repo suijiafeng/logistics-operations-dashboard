@@ -1,0 +1,24 @@
+[
+  {
+    "shot": "screenshot-1440x900",
+    "size": "1440x900",
+    "scrollW": 1440,
+    "scrollH": 900,
+    "innerW": 1440,
+    "innerH": 900,
+    "view": "china",
+    "status": "ready",
+    "fps": []
+  },
+  {
+    "shot": "screenshot-1366x768",
+    "size": "1366x768",
+    "scrollW": 1366,
+    "scrollH": 768,
+    "innerW": 1366,
+    "innerH": 768,
+    "view": "china",
+    "status": "ready",
+    "fps": []
+  }
+]

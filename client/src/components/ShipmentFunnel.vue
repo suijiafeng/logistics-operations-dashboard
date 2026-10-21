@@ -95,9 +95,13 @@ const extra = computed(() => s.value
 .last .bar i { background: var(--color-barLight); }
 small { font-size: 11px; color: var(--color-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .empty { color: var(--color-secondary); font-size: var(--font-small); }
-@media (max-height: 820px) {
-  .tile { padding: 4px 6px; }
+@media (max-width: 1599px), (max-height: 980px) {
+  .tile { padding: 5px 6px 4px; }
   .value { font-size: 16px; font-size: clamp(13px, 20cqw, 16px); }
+}
+@media (max-height: 820px) {
+  .tile { padding: 2px 6px; gap: 1px; }
+  .name { font-size: 11px; }
   small { display: none; }
 }
 </style>

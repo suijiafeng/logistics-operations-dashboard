@@ -5,24 +5,26 @@ import vue from '@vitejs/plugin-vue'
 const env = (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env ?? {}
 const engine = env.ENGINE_URL || 'http://localhost:8787'
 
+const proxy = {
+  '/api': {
+    target: engine,
+    changeOrigin: true,
+    rewrite: (p: string) => p.replace(/^\/api/, ''),
+  },
+  '/ws': {
+    target: engine.replace(/^http/, 'ws'),
+    ws: true,
+    rewrite: () => '/',
+  },
+}
+
 export default defineConfig({
   plugins: [vue()],
   // 地图 GeoJSON 以 JSON.parse("…") 形式打包，比同等大小的 JS 对象字面量解析更快
   json: { stringify: true },
-  server: {
-    proxy: {
-      '/api': {
-        target: engine,
-        changeOrigin: true,
-        rewrite: (p) => p.replace(/^\/api/, ''),
-      },
-      '/ws': {
-        target: engine.replace(/^http/, 'ws'),
-        ws: true,
-        rewrite: () => '/',
-      },
-    },
-  },
+  server: { proxy },
+  // vite preview 同样代理到引擎，验收脚本可直接对生产构建截图与测帧率
+  preview: { proxy },
   build: {
     target: 'chrome87',
     chunkSizeWarningLimit: 2500,
