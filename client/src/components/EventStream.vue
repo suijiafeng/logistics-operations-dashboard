@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Panel from './Panel.vue'
 import { useDashboardStore, type AnomalyEvent } from '../stores/dashboard'
 
@@ -38,12 +38,38 @@ function locate(event: AnomalyEvent) {
   }
 }
 
+// 新到的严重告警短暂高亮：首屏快照里的历史事件不算「新到」，避免一打开页面满屏闪
+const FRESH_MS = 8000
+const fresh = ref(new Set<number>())
+const seen = new Set<number>()
+const freshTimers = new Set<number>()
+let primed = false
+watch(() => store.events, (events) => {
+  if (!primed) {
+    for (const e of events) seen.add(e.id)
+    primed = store.hasData
+    return
+  }
+  for (const e of events) {
+    if (seen.has(e.id)) continue
+    seen.add(e.id)
+    if (e.level !== 2) continue
+    fresh.value = new Set(fresh.value).add(e.id)
+    const timer = window.setTimeout(() => {
+      freshTimers.delete(timer)
+      const next = new Set(fresh.value); next.delete(e.id); fresh.value = next
+    }, FRESH_MS)
+    freshTimers.add(timer)
+  }
+  if (seen.size > 500) for (const id of [...seen].slice(0, seen.size - 300)) seen.delete(id)
+})
+
 onMounted(() => {
   observer = new ResizeObserver(measure)
   if (stream.value) observer.observe(stream.value)
   if (sample.value) observer.observe(sample.value)
 })
-onBeforeUnmount(() => observer?.disconnect())
+onBeforeUnmount(() => { observer?.disconnect(); for (const t of freshTimers) window.clearTimeout(t) })
 </script>
 
 <template>
@@ -51,7 +77,7 @@ onBeforeUnmount(() => observer?.disconnect())
     <div ref="stream" class="stream">
       <p v-if="store.hasData && store.events.length === 0" class="empty">本次连接暂无新事件。</p>
       <TransitionGroup name="evt" tag="ul" class="list">
-        <li v-for="e in visibleEvents" :key="e.id" class="item" role="button" tabindex="0" :class="{ active: store.activeEvent?.id === e.id }"
+        <li v-for="e in visibleEvents" :key="e.id" class="item" role="button" tabindex="0" :class="{ active: store.activeEvent?.id === e.id, fresh: fresh.has(e.id) }"
           :aria-label="`${LEVEL_TEXT[e.level] ?? '提醒'}，${e.type}，${e.vehicle}，${e.place}，${e.desc}，点击定位事件线路和发生位置`"
           :title="`${e.type} · ${e.vehicle} · ${e.time}\n${e.place}\n${e.desc}`"
           @click="locate(e)" @keydown.enter="locate(e)" @keydown.space.prevent="locate(e)">
@@ -97,6 +123,9 @@ onBeforeUnmount(() => observer?.disconnect())
 }
 .item:hover { background: var(--color-hover); }
 .item.active { background: var(--color-selected); }
+/* 新到严重告警：红底闪 3 次后保持淡红底，8 秒后恢复；减少动态效果时只保留静态淡红底 */
+.item.fresh { background: rgba(240, 82, 77, 0.12); animation: severe-flash 1.2s ease-in-out 3; }
+@keyframes severe-flash { 0%, 100% { background: rgba(240, 82, 77, 0.06); } 50% { background: rgba(240, 82, 77, 0.3); } }
 /* 级别用标题前的小圆点表达，避免整列彩条抢视线 */
 .sev { position: absolute; left: 6px; top: 15px; width: 6px; height: 6px; border-radius: 50%; }
 .lv0 { background: var(--color-border); }
