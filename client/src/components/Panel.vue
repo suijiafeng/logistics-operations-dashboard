@@ -1,8 +1,11 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useDashboardStore } from '../stores/dashboard'
-defineProps<{ title: string; extra?: string; tabs?: { key: string; label: string }[]; active?: string }>()
+const props = defineProps<{ title: string; extra?: string; tabs?: { key: string; label: string }[]; active?: string; standalone?: boolean }>()
 const emit = defineEmits<{ (e: 'update:active', key: string): void }>()
 const store = useDashboardStore()
+// 配送轨迹用的是仓库里的演示样本，不该被引擎快照的加载态挡住
+const gated = computed(() => !props.standalone && !store.hasData)
 </script>
 
 <template>
@@ -15,9 +18,9 @@ const store = useDashboardStore()
       </div>
       <span v-if="extra" class="extra" :title="extra">{{ extra }}</span>
     </header>
-    <div class="panel-body" :class="{ pending: !store.hasData }" :aria-busy="store.dataStatus === 'loading'">
-      <div class="panel-content" :inert="!store.hasData"><slot /></div>
-      <p v-if="!store.hasData" class="placeholder">{{ store.dataStatus === 'error' ? '数据暂不可用，正在重试' : '正在加载数据…' }}</p>
+    <div class="panel-body" :class="{ pending: gated }" :aria-busy="!standalone && store.dataStatus === 'loading'">
+      <div class="panel-content" :inert="gated"><slot /></div>
+      <p v-if="gated" class="placeholder">{{ store.dataStatus === 'error' ? '数据暂不可用，正在重试' : '正在加载数据…' }}</p>
     </div>
   </section>
 </template>

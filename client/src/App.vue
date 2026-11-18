@@ -18,6 +18,7 @@ import Timeline from './components/Timeline.vue'
 import { startDataFeed, stopDataFeed } from './services/socket'
 import { useDashboardStore } from './stores/dashboard'
 import FeedNotice from './components/FeedNotice.vue'
+import DeliveryBoard from './components/DeliveryBoard.vue'
 import { usePerformance } from './services/usePerformance'
 import { useDisplayRuntime } from './services/useDisplayRuntime'
 import { useScreenScale } from './services/useScreenScale'
@@ -54,6 +55,8 @@ onMounted(() => {
   if (import.meta.env.DEV || new URLSearchParams(location.search).get('debug') === '1') {
     ;(window as unknown as Record<string, unknown>).__dashboard = store
   }
+  const scene = new URLSearchParams(location.search).get('scene')
+  if (scene === 'delivery') store.openDelivery(new URLSearchParams(location.search).get('waybill'))
 })
 onBeforeUnmount(() => {
   window.clearInterval(freshnessTimer)
@@ -64,7 +67,8 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="viewport" data-screen-scale :class="[{ kiosk: store.kioskOn, 'cursor-hidden': store.cursorHidden, scaled: store.screenScale > 1 }, `fit-${fit}`]" :style="scaleStyle">
-    <div class="screen" :class="{ 'motion-off': !store.decorationsOn, 'seam-safe': seamLayout }" :style="seamLayout">
+    <DeliveryBoard v-if="store.scene === 'delivery'" />
+    <div v-else class="screen" :class="{ 'motion-off': !store.decorationsOn, 'seam-safe': seamLayout }" :style="seamLayout">
       <div class="heading">
         <TopBar />
       </div>
@@ -152,7 +156,7 @@ button:focus-visible, [role='button']:focus-visible {
 }
 /* 放大模式：zoom 后 vh 会被再乘一次，高度改用逻辑像素 --vh（由 useScreenScale 下发）。须在 fit 规则之前，fit-width 才能覆盖 */
 .viewport.scaled { min-height: calc(var(--vh) * 100); }
-.scaled .screen { height: calc(var(--vh) * 100); }
+.scaled .screen, .scaled .delivery-screen { height: calc(var(--vh) * 100); }
 .kiosk { user-select: none; }
 .cursor-hidden, .cursor-hidden :deep(*) { cursor: none !important; }
 .top-stack {

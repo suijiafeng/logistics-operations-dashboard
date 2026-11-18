@@ -35,6 +35,7 @@ const date = computed(() => now.value.toLocaleDateString('zh-CN', { month: 'long
   <header class="topbar">
     <div class="side left">
       <span class="sim-tag" title="页面数据由自研模拟引擎生成，非真实业务数据">仿真数据</span>
+      <button type="button" class="entry" title="查看演示运单的配送轨迹" @click="store.openDelivery()">配送轨迹</button>
       <DisplayControls />
     </div>
 
@@ -87,6 +88,16 @@ const date = computed(() => now.value.toLocaleDateString('zh-CN', { month: 'long
   border-radius: 3px;
   padding: 0 var(--space-2);
   line-height: 20px;
+}
+.entry {
+  flex: none;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--color-accentText);
+  font-size: var(--font-small);
+  cursor: pointer;
 }
 
 /* ---- 标题区装饰 ---- */
