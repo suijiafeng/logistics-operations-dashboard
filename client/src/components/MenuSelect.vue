@@ -47,7 +47,9 @@ function onKey(event: KeyboardEvent) {
   if (event.key === 'End') { event.preventDefault(); active.value = Math.max(0, props.options.length - 1) }
   if (event.key === 'Enter' || event.key === ' ') {
     event.preventDefault()
-    const option = props.options[active.value]
+    const focused = event.target instanceof HTMLElement ? event.target.closest<HTMLElement>('[role="option"]') : null
+    const focusedIndex = focused ? Number(focused.dataset.index) : active.value
+    const option = props.options[Number.isFinite(focusedIndex) ? focusedIndex : active.value]
     if (option) pick(option.value)
   }
 }
@@ -87,8 +89,11 @@ onBeforeUnmount(() => document.removeEventListener('pointerdown', onDoc))
           class="option"
           :aria-selected="option.value === modelValue"
           :data-active="index === active"
+          :data-index="index"
           :class="{ on: option.value === modelValue, active: index === active }"
+          tabindex="-1"
           @mouseenter="active = index"
+          @focus="active = index"
           @click="pick(option.value)"
         >{{ option.label }}</button>
       </li>

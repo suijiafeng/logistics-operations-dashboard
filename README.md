@@ -6,6 +6,29 @@
 
 ![广东下钻](docs/screenshot-guangdong.png)
 
+<table>
+  <tr>
+    <td width="400" align="center">
+      <img src="docs/screenshots/vehicle.webp" width="400" alt="车牌追踪">
+      <br>车牌追踪：车速、朝向和剩余里程
+    </td>
+    <td width="400" align="center">
+      <img src="docs/screenshots/playback.webp" width="400" alt="回放时间轴">
+      <br>回放：最近 1 小时的位置，10 秒一帧
+    </td>
+  </tr>
+  <tr>
+    <td width="400" align="center">
+      <img src="docs/screenshots/delivery.webp" width="400" alt="配送轨迹">
+      <br>配送轨迹：没有高德 Key 时的离线预览
+    </td>
+    <td width="400" align="center">
+      <img src="docs/screenshots/mobile.webp" width="400" alt="窄屏布局">
+      <br>窄屏：地图在上，指标收成 2×2
+    </td>
+  </tr>
+</table>
+
 ## 功能
 
 - 全国地图，以及任意省份下钻；干线按今日单量分级，图层可以单独开关
@@ -49,4 +72,4 @@ PORT=8788 ENGINE_URL=http://localhost:8788 npm run dev
 
 - `client/` 大屏
 - `server/` 模拟引擎
-- `docs/` 上面两张运行截图
+- `docs/` 上面的运行截图
