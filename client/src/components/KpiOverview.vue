@@ -52,7 +52,7 @@ dd { display: flex; align-items: baseline; gap: var(--space-1); min-width: 0; ma
   font-size: clamp(20px, 15cqw, var(--font-kpi));
   font-weight: 600;
   line-height: 1.2;
-  color: var(--color-accent);
+  color: var(--color-heading);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   overflow: hidden;

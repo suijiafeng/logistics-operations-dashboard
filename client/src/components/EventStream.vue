@@ -198,8 +198,8 @@ onBeforeUnmount(() => { observer?.disconnect(); resetFresh() })
 .item.active { background: var(--color-selected); }
 .item.closed { opacity: 0.6; }
 /* 新到严重告警：红底闪 3 次后保持淡红底，8 秒后恢复；减少动态效果时只保留静态淡红底 */
-.item.fresh { background: rgba(229, 72, 77, 0.12); animation: severe-flash 1.2s ease-in-out 3; }
-@keyframes severe-flash { 0%, 100% { background: rgba(229, 72, 77, 0.06); } 50% { background: rgba(229, 72, 77, 0.22); } }
+.item.fresh { background: rgba(240, 82, 77, 0.12); animation: severe-flash 1.2s ease-in-out 3; }
+@keyframes severe-flash { 0%, 100% { background: rgba(240, 82, 77, 0.06); } 50% { background: rgba(240, 82, 77, 0.3); } }
 /* 级别用标题前的小圆点表达，避免整列彩条抢视线 */
 .sev { position: absolute; left: 6px; top: 15px; width: 6px; height: 6px; border-radius: 50%; }
 .lv0 { background: var(--color-border); }

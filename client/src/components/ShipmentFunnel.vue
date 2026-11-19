@@ -77,7 +77,7 @@ const extra = computed(() => s.value
   font-size: clamp(14px, 24cqw, 20px);
   font-weight: 600;
   line-height: 1.2;
-  color: var(--color-accent);
+  color: var(--color-heading);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   overflow: hidden;

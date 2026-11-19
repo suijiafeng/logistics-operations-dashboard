@@ -180,7 +180,7 @@ onBeforeUnmount(() => {
       </Panel>
     </div>
 
-    <Panel class="eff-panel" standalone title="运输效率" extra="承诺用时 / 实际用时 · 蓝色为当前运单">
+    <Panel class="eff-panel" standalone title="运输效率" extra="承诺用时 / 实际用时 · 橙色为当前运单">
       <WaybillEfficiencyChart />
     </Panel>
   </div>

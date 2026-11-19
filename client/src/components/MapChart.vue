@@ -496,7 +496,7 @@ function baseOption() {
         data: [] as [number, number, number][],
       },
       {
-        // 选中的干线：蓝色加粗压在分级线路之上
+        // 选中的干线：橙色加粗压在分级线路之上
         id: 'route-focus', type: 'lines', coordinateSystem: 'geo', zlevel: 5,
         polyline: true, silent: true, lineStyle: { color: ACCENT, width: 4, opacity: 1 },
         data: routeFocusData(),
@@ -565,7 +565,7 @@ function baseOption() {
       },
       {
         id: 'hub-hit', type: 'scatter', coordinateSystem: 'geo', zlevel: 4,
-        symbolSize: 44, itemStyle: { color: 'rgba(47, 128, 255, 0.01)' },
+        symbolSize: 44, itemStyle: { color: 'rgba(255, 138, 61, 0.001)' },
         emphasis: { disabled: true }, tooltip: { formatter: hubTooltip },
         data: hitData(),
       },
@@ -588,7 +588,7 @@ function baseOption() {
         tooltip: { formatter: (p: { name: string }) => `事件发生位置 · ${p.name}<br/>（事件发生时的位置，不是实时车辆追踪）` }, data: eventPositionData(),
       },
       {
-        // 追踪车辆所在干线：蓝色高亮，其余线路淡出
+        // 追踪车辆所在干线：橙色高亮，其余线路淡出
         id: 'vehicle-route', type: 'lines', coordinateSystem: 'geo', zlevel: 5,
         polyline: true, silent: true, lineStyle: { color: ACCENT, width: 2.5, opacity: 0.9 },
         data: vehicleRouteData(),

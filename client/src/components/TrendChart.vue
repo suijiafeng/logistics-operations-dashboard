@@ -27,7 +27,7 @@ function render() {
     tooltip: {
       ...TOOLTIP,
       trigger: 'axis',
-      axisPointer: { type: 'shadow', shadowStyle: { color: 'rgba(47, 128, 255, 0.10)' } },
+      axisPointer: { type: 'shadow', shadowStyle: { color: 'rgba(91, 166, 238, 0.08)' } },
       formatter: (params: unknown) => formatTrendTooltip(params, store.trend, currentHour, store.trendYesterday),
     },
     xAxis: {
@@ -78,7 +78,7 @@ watch([chart, () => store.chartVersion], render)
 
 <template>
   <Panel title="今日分时运单" :extra="`${asOf ? `截至 ${asOf}` : '北京时间'}${store.trendYesterday.length === 24 ? ' · 虚线为昨日' : ''}`">
-    <div ref="el" class="chart" role="img" aria-label="今日各小时运单量柱状图，蓝色虚线柱为当前小时累计中，浅色虚线为昨日各小时运单" />
+    <div ref="el" class="chart" role="img" aria-label="今日各小时运单量柱状图，橙色虚线柱为当前小时累计中，浅色虚线为昨日各小时运单" />
   </Panel>
 </template>
 

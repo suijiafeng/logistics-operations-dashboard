@@ -52,11 +52,11 @@ function render() {
       smooth: false,
       showSymbol: false,
       lineStyle: { color: COLORS.barLight, width: 1.5 },
-      areaStyle: { color: areaFade(142, 186, 255) },
+      areaStyle: { color: areaFade(91, 166, 238) },
       data: speedSamples(points).map((sample) => [sample.t, Math.round(sample.speedKmh * 10) / 10]),
       markArea: {
         silent: true,
-        itemStyle: { color: 'rgba(47, 128, 255, 0.10)' },
+        itemStyle: { color: 'rgba(232, 177, 60, 0.38)' },
         label: { show: false },
         data: props.stays.map((stay) => [{ xAxis: stay.startT }, { xAxis: stay.endT }]),
       },
@@ -68,7 +68,7 @@ watch([chart, () => props.points, () => props.stays], render)
 </script>
 
 <template>
-  <div ref="el" class="chart" role="img" aria-label="当前运单速度随时间变化，浅色色带为停留" />
+  <div ref="el" class="chart" role="img" aria-label="当前运单速度随时间变化，琥珀色带为停留" />
 </template>
 
 <style scoped>
