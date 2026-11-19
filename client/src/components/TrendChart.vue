@@ -27,7 +27,7 @@ function render() {
     tooltip: {
       ...TOOLTIP,
       trigger: 'axis',
-      axisPointer: { type: 'shadow', shadowStyle: { color: 'rgba(255, 255, 255, 0.04)' } },
+      axisPointer: { type: 'shadow', shadowStyle: { color: 'rgba(91, 166, 238, 0.08)' } },
       formatter: (params: unknown) => formatTrendTooltip(params, store.trend, currentHour, store.trendYesterday),
     },
     xAxis: {

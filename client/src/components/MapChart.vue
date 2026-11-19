@@ -565,7 +565,7 @@ function baseOption() {
       },
       {
         id: 'hub-hit', type: 'scatter', coordinateSystem: 'geo', zlevel: 4,
-        symbolSize: 44, itemStyle: { color: 'rgba(255, 79, 0, 0.01)' },
+        symbolSize: 44, itemStyle: { color: 'rgba(255, 138, 61, 0.001)' },
         emphasis: { disabled: true }, tooltip: { formatter: hubTooltip },
         data: hitData(),
       },

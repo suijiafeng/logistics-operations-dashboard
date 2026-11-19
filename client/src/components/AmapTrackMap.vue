@@ -166,9 +166,9 @@ function addAdminLabels(namespace: AMapNamespace, target: AMapMap) {
         depth: 2,
         styles: {
           fill: 'rgba(0, 0, 0, 0)',
-          'province-stroke': 'rgba(255, 255, 255, 0.22)',
-          'city-stroke': 'rgba(255, 255, 255, 0.16)',
-          'county-stroke': 'rgba(255, 255, 255, 0.1)',
+          'province-stroke': 'rgba(91, 166, 238, 0.28)',
+          'city-stroke': 'rgba(156, 182, 214, 0.5)',
+          'county-stroke': 'rgba(156, 182, 214, 0.32)',
           'stroke-width': 1,
         },
       }))
