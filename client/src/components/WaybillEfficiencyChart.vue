@@ -3,7 +3,7 @@ import { computed, watch } from 'vue'
 import { DEMO_WAYBILLS } from '../data/deliveryTracks'
 import { COLORS, FONT } from '../design/tokens'
 import { analyzeTrack, efficiencyPercent } from '../services/trackGeometry'
-import { TEXT, TOOLTIP, useEcharts } from '../services/useEcharts'
+import { AXIS_CLEAN, SPLIT_LINE, TEXT, TOOLTIP, useEcharts } from '../services/useEcharts'
 import { useDashboardStore } from '../stores/dashboard'
 
 const store = useDashboardStore()
@@ -37,15 +37,15 @@ function render() {
       type: 'value',
       max: 140,
       splitNumber: 3,
-      splitLine: { lineStyle: { color: COLORS.track } },
+      ...AXIS_CLEAN,
+      splitLine: SPLIT_LINE,
       axisLabel: { ...TEXT, fontFamily: FONT.number, formatter: (value: number) => `${value}%` },
     },
     yAxis: {
       type: 'category',
       inverse: true,
       data: rows.value.map((row) => row.waybill.label),
-      axisLine: { lineStyle: { color: COLORS.border } },
-      axisTick: { show: false },
+      ...AXIS_CLEAN,
       axisLabel: {
         ...TEXT,
         color: (value?: string) => rows.value.find((row) => row.waybill.label === value)?.waybill.id === store.selectedWaybillId ? COLORS.accentText : COLORS.secondary,

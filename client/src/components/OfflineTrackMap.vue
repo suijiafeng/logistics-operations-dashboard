@@ -110,12 +110,12 @@ svg { display: block; width: 100%; height: 100%; }
 .field { fill: var(--color-mapArea); }
 .grid { stroke: var(--color-track); stroke-width: 1; }
 .caption { fill: var(--color-secondary); font-size: 12px; }
-.bound { fill: var(--color-tertiary); font-size: 11px; font-family: var(--font-number); }
+.bound { fill: var(--color-tertiary); font-size: 12px; font-family: var(--font-number); }
 .track { fill: none; stroke: var(--color-barLight); stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; opacity: 0.45; }
 .traveled { fill: none; stroke: var(--color-accent); stroke-width: 4; stroke-linejoin: round; stroke-linecap: round; }
-.origin { fill: var(--color-success); }
-.transfer, .stay { fill: var(--color-warning); }
-.destination { fill: var(--color-danger); }
+.origin { fill: var(--color-vehicle); }
+.transfer, .stay { fill: var(--color-dwell); }
+.destination { fill: var(--color-accent); }
 text { fill: var(--color-text); font-size: 12px; font-family: var(--font-family); }
 .veh { fill: var(--color-accent); stroke: var(--color-canvas); stroke-width: 1; }
 </style>

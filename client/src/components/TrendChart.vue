@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, watch } from 'vue'
 import Panel from './Panel.vue'
-import { useEcharts, TEXT, TOOLTIP } from '../services/useEcharts'
+import { useEcharts, TEXT, TOOLTIP, AXIS_CLEAN, SPLIT_LINE } from '../services/useEcharts'
 import { COLORS, FONT } from '../design/tokens'
 import { formatTrendTooltip } from '../services/formatTrendTooltip'
 import { useDashboardStore } from '../stores/dashboard'
@@ -27,20 +27,20 @@ function render() {
     tooltip: {
       ...TOOLTIP,
       trigger: 'axis',
-      axisPointer: { type: 'shadow', shadowStyle: { color: 'rgba(91, 166, 238, 0.08)' } },
+      axisPointer: { type: 'shadow', shadowStyle: { color: 'rgba(255, 255, 255, 0.04)' } },
       formatter: (params: unknown) => formatTrendTooltip(params, store.trend, currentHour, store.trendYesterday),
     },
     xAxis: {
       type: 'category',
       data: hours,
-      axisLine: { lineStyle: { color: COLORS.border } },
-      axisTick: { show: false },
+      ...AXIS_CLEAN,
       axisLabel: { ...TEXT, fontFamily: FONT.number, interval: (i: number) => i % 6 === 0 },
     },
     yAxis: {
       type: 'value',
       splitNumber: 3,
-      splitLine: { lineStyle: { color: COLORS.track } },
+      ...AXIS_CLEAN,
+      splitLine: SPLIT_LINE,
       axisLabel: { ...TEXT, fontFamily: FONT.number, formatter: (v: number) => (v >= 1000 ? `${+(v / 1000).toFixed(1)}k` : `${v}`) },
     },
     series: [

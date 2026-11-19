@@ -28,16 +28,11 @@ const pct = computed(() => `${Math.max(0, Math.min(100, (props.value / Math.max(
   border-radius: var(--radius-control);
 }
 .rank {
-  width: 20px;
-  height: 20px;
-  border-radius: var(--radius-control);
-  background: var(--color-elevated);
-  color: var(--color-secondary);
+  color: var(--color-tertiary);
   font-family: var(--font-number);
   font-size: var(--font-small);
   font-weight: 600;
-  display: grid;
-  place-items: center;
+  font-variant-numeric: tabular-nums;
 }
 .name {
   min-width: 0;
@@ -58,7 +53,7 @@ const pct = computed(() => `${Math.max(0, Math.min(100, (props.value / Math.max(
   height: 100%;
   background: var(--color-barStrong);
   border-radius: 3px;
-  transition: width 0.6s ease;
+  transition: width 150ms ease-out;
 }
 .val {
   min-width: 4ch;

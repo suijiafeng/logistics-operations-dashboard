@@ -11,7 +11,6 @@ const gated = computed(() => !props.standalone && !store.hasData)
 <template>
   <section class="panel">
     <header class="panel-head">
-      <span class="tick" />
       <h3>{{ title }}</h3>
       <div v-if="tabs?.length" class="tabs" role="tablist">
         <button v-for="t in tabs" :key="t.key" type="button" role="tab" :aria-selected="t.key === active" :class="{ on: t.key === active }" @click="emit('update:active', t.key)">{{ t.label }}</button>
@@ -28,7 +27,7 @@ const gated = computed(() => !props.standalone && !store.hasData)
 <style scoped>
 .panel {
   background: var(--color-panel);
-  border: 1px solid var(--color-track);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-panel);
   display: flex;
   flex-direction: column;
@@ -43,13 +42,6 @@ const gated = computed(() => !props.standalone && !store.hasData)
   padding: var(--space-3) var(--space-4) 0;
   min-width: 0;
 }
-.panel-head .tick {
-  width: 3px;
-  height: 14px;
-  background: var(--color-barLight);
-  border-radius: 2px;
-  flex: none;
-}
 .panel-head h3 {
   flex: none;
   font-size: var(--font-title);
@@ -58,9 +50,9 @@ const gated = computed(() => !props.standalone && !store.hasData)
   white-space: nowrap;
 }
 .tabs { display: flex; gap: 2px; margin-left: var(--space-2); flex: none; }
-.tabs button { min-height: 22px; min-width: 0; padding: 0 8px; border: 1px solid transparent; border-radius: 11px; background: transparent; color: var(--color-tertiary); font-size: 11px; cursor: pointer; white-space: nowrap; }
+.tabs button { min-height: 24px; min-width: 0; padding: 0 8px; border: 1px solid transparent; border-radius: var(--radius-control); background: transparent; color: var(--color-tertiary); font-size: 12px; cursor: pointer; white-space: nowrap; }
 .tabs button:hover { color: var(--color-heading); background: var(--color-hover); }
-.tabs button.on { background: var(--color-infoBg); border-color: var(--color-border); color: var(--color-heading); }
+.tabs button.on { background: var(--color-selected); border-color: var(--color-accent); color: var(--color-heading); }
 .panel-head .extra {
   margin-left: auto;
   min-width: 0;

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useDashboardStore } from '../stores/dashboard'
+import MenuSelect from './MenuSelect.vue'
 import { fetchHistoryIndex, fetchHistoryFrame } from '../services/history'
 
 // 回放时间轴：引擎每 10 秒一帧、保留 1 小时。打开后地图改画历史帧，实时数据继续在后台更新，退出即回到实时。
@@ -96,8 +97,9 @@ function startPlaying() {
 }
 
 function togglePlay() { if (pb.value.playing) stopPlaying(); else startPlaying() }
-function setSpeed(event: Event) {
-  store.playback.fps = Number((event.target as HTMLSelectElement).value) || 3
+const speedOptions = SPEEDS.map((item) => ({ value: String(item.fps), label: item.label }))
+function setSpeed(value: string) {
+  store.playback.fps = Number(value) || 3
   if (pb.value.playing) startPlaying()
 }
 function onRange(event: Event) { stopPlaying(); seek(Number((event.target as HTMLInputElement).value)) }
@@ -138,7 +140,7 @@ onBeforeUnmount(() => { stopPlaying(); window.clearInterval(refreshTimer); contr
       </div>
       <div class="now" :class="{ loading: pb.loading }"><b>{{ frameTime }}</b><small>回放 · 10 秒/帧</small></div>
       <label class="speed">速度
-        <select :value="pb.fps" @change="setSpeed"><option v-for="s in SPEEDS" :key="s.fps" :value="s.fps">{{ s.label }}</option></select>
+        <MenuSelect :model-value="String(pb.fps)" ariaLabel="回放速度" placement="up" :options="speedOptions" @update:model-value="setSpeed" />
       </label>
     </template>
   </div>
@@ -169,6 +171,7 @@ onBeforeUnmount(() => { stopPlaying(); window.clearInterval(refreshTimer); contr
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  flex: none;
   min-height: 32px;
   padding: 0 12px;
   border: 1px solid var(--color-border);
@@ -176,27 +179,37 @@ onBeforeUnmount(() => { stopPlaying(); window.clearInterval(refreshTimer); contr
   background: var(--color-legend);
   color: var(--color-secondary);
   font-size: var(--font-small);
+  white-space: nowrap;
   cursor: pointer;
 }
 .opener:hover, .live:hover, .play:hover { color: var(--color-heading); background: var(--color-hover); }
 .opener svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 .live { background: transparent; color: var(--color-accentText); border-color: var(--color-accent); }
-.play { min-width: 36px; justify-content: center; font-size: 11px; background: transparent; }
+.play { min-width: 36px; justify-content: center; font-size: 12px; background: transparent; }
 .play:disabled { opacity: 0.5; cursor: default; }
 .track { flex: 1; min-width: 120px; display: grid; gap: 2px; }
 .track input[type='range'] { width: 100%; height: 18px; margin: 0; accent-color: var(--color-accent); cursor: pointer; }
-.labels { display: flex; justify-content: space-between; gap: var(--space-2); font-family: var(--font-number); font-size: 11px; color: var(--color-tertiary); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.labels { display: flex; justify-content: space-between; gap: var(--space-2); font-family: var(--font-number); font-size: 12px; color: var(--color-tertiary); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .labels .status { overflow: hidden; text-overflow: ellipsis; }
 .labels .status.err { color: var(--color-dangerText); }
 .now { display: grid; justify-items: end; min-width: 84px; }
 .now b { font-family: var(--font-number); font-size: 16px; color: var(--color-accentText); font-variant-numeric: tabular-nums; }
 .now.loading b { opacity: 0.5; }
-.now small { font-size: 11px; color: var(--color-tertiary); white-space: nowrap; }
+.now small { font-size: 12px; color: var(--color-tertiary); white-space: nowrap; }
 .speed { display: flex; align-items: center; gap: 6px; font-size: var(--font-small); color: var(--color-secondary); white-space: nowrap; }
-.speed select { min-height: 28px; padding: 0 6px; background: var(--color-canvas); color: var(--color-text); border: 1px solid var(--color-border); border-radius: var(--radius-control); font: inherit; font-size: var(--font-small); }
 /* 窄屏：地图宽度不够与图例并排，时间轴移到图例上方 */
 @media (max-width: 1279px) {
   .timeline { left: var(--space-4); right: var(--space-4); bottom: 212px; }
   .speed { display: none; }
+}
+/* 手机：收起时的「回放」不要压在左下图例上，接到检索框下方 */
+@media (max-width: 767px) {
+  .timeline:not(.open) {
+    top: 48px;
+    right: var(--space-2);
+    bottom: auto;
+    left: auto;
+    width: max-content;
+  }
 }
 </style>

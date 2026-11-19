@@ -5,7 +5,7 @@ import { useFocus } from '../services/useFocus'
 import { hubById } from '../data/network'
 import { fetchVehicle } from '../services/vehicles'
 import { fetchVehicleTrail, fetchVehicleTemps, type TempSeries } from '../services/history'
-import { useEcharts, TEXT, TOOLTIP } from '../services/useEcharts'
+import { areaFade, AXIS_CLEAN, SPLIT_LINE, TEXT, TOOLTIP, useEcharts } from '../services/useEcharts'
 import { COLORS, FONT } from '../design/tokens'
 import { fmtInt } from '../services/format'
 
@@ -41,13 +41,13 @@ function renderTemps() {
       const p = ps[0]; if (!p) return ''
       return `${new Date(p.value[0]).toLocaleTimeString('zh-CN', { hour12: false, timeZone: 'Asia/Shanghai' })} · ${p.value[1].toFixed(1)}℃`
     } },
-    xAxis: { type: 'time', axisLine: { lineStyle: { color: COLORS.border } }, axisTick: { show: false },
-      axisLabel: { ...TEXT, fontFamily: FONT.number, fontSize: 10, hideOverlap: true, formatter: (v: number) => new Date(v).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Shanghai' }) } },
-    yAxis: { type: 'value', min: Math.floor(lo), max: Math.ceil(hi), splitNumber: 3, splitLine: { lineStyle: { color: COLORS.track } },
-      axisLabel: { ...TEXT, fontFamily: FONT.number, fontSize: 10, formatter: '{value}℃' } },
+    xAxis: { type: 'time', ...AXIS_CLEAN,
+      axisLabel: { ...TEXT, fontFamily: FONT.number, hideOverlap: true, formatter: (v: number) => new Date(v).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'Asia/Shanghai' }) } },
+    yAxis: { type: 'value', min: Math.floor(lo), max: Math.ceil(hi), splitNumber: 3, ...AXIS_CLEAN, splitLine: SPLIT_LINE,
+      axisLabel: { ...TEXT, fontFamily: FONT.number, formatter: '{value}℃' } },
     series: [{
-      type: 'line', data, showSymbol: false, smooth: 0.3,
-      lineStyle: { color: '#3fd1c8', width: 1.5 }, areaStyle: { color: 'rgba(63, 209, 200, 0.12)' },
+      type: 'line', data, showSymbol: false, smooth: false,
+      lineStyle: { color: COLORS.cold, width: 1.5 }, areaStyle: { color: areaFade(143, 163, 154) },
       markArea: { silent: true, itemStyle: { color: 'rgba(52, 199, 123, 0.12)' }, data: [[{ yAxis: t.lo }, { yAxis: t.hi }]] },
       markLine: { silent: true, symbol: 'none', lineStyle: { color: COLORS.secondary, type: 'dashed', width: 1 }, label: { show: false }, data: [{ yAxis: t.target }] },
     }],
@@ -230,28 +230,28 @@ h4 { font-family: var(--font-number); font-size: 18px; font-weight: 700; color: 
 
 .driver { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: var(--space-3); font-size: var(--font-small); }
 .driver .name { color: var(--color-heading); font-weight: 500; }
-.tag { padding: 0 6px; border-radius: 8px; font-size: 10px; line-height: 16px; }
-.tag.cold { background: rgba(63, 209, 200, 0.18); color: #7fe3dd; }
-.score { padding: 0 6px; border-radius: 8px; font-family: var(--font-number); font-size: 11px; line-height: 16px; background: var(--color-elevated); color: var(--color-heading); }
+.tag { padding: 0 6px; border: 1px solid var(--color-border); border-radius: 999px; font-size: 12px; line-height: 18px; }
+.tag.cold { color: var(--color-secondary); }
+.score { padding: 0 6px; border-radius: 999px; font-family: var(--font-number); font-size: 12px; line-height: 18px; background: var(--color-elevated); color: var(--color-heading); font-variant-numeric: tabular-nums; }
 .score.warn { color: var(--color-warning); }
 .score.danger { color: var(--color-dangerText); }
-.driver .counts { font-size: 11px; color: var(--color-tertiary); }
-.temp { margin-top: var(--space-3); padding: 8px 10px; border-radius: var(--radius-tile); background: var(--color-elevated); }
+.driver .counts { font-size: 12px; color: var(--color-tertiary); }
+.temp { margin-top: var(--space-3); padding-top: 8px; border-top: 1px solid var(--color-border); }
 .temp-head { display: flex; align-items: baseline; gap: var(--space-2); font-size: var(--font-small); color: var(--color-secondary); }
-.temp-head b { font-family: var(--font-number); font-size: 18px; color: #7fe3dd; font-variant-numeric: tabular-nums; }
+.temp-head b { font-family: var(--font-number); font-size: 18px; color: var(--color-heading); font-variant-numeric: tabular-nums; }
 .temp-head b.hot, .temp-head .hot { color: var(--color-dangerText); }
-.temp-head em { font-style: normal; margin-left: 6px; font-size: 11px; }
-.temp-head small { margin-left: auto; font-size: 11px; color: var(--color-tertiary); }
+.temp-head em { font-style: normal; margin-left: 6px; font-size: 12px; }
+.temp-head small { margin-left: auto; font-size: 12px; color: var(--color-tertiary); }
 .temp-chart { height: 84px; margin-top: 4px; }
-.temp-note { margin-top: 2px; font-size: 10px; color: var(--color-tertiary); }
+.temp-note { margin-top: 2px; font-size: 12px; color: var(--color-tertiary); }
 .route { display: flex; align-items: center; gap: var(--space-2); margin-top: var(--space-4); }
 .hub {
   flex: 1;
   min-width: 0;
   min-height: 32px;
   padding: 0 10px;
-  background: var(--color-elevated);
-  border: 1px solid transparent;
+  background: transparent;
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-control);
   color: var(--color-heading);
   font-size: var(--font-body);
@@ -265,15 +265,18 @@ h4 { font-family: var(--font-number); font-size: 18px; font-weight: 700; color: 
 .arrow { flex: none; color: var(--color-accent); font-weight: 700; }
 .progress { margin-top: var(--space-3); }
 .bar { height: 6px; background: var(--color-track); border-radius: 3px; overflow: hidden; }
-.fill { height: 100%; background: var(--color-accent); border-radius: 3px; transition: width 0.6s ease; }
-.progress-labels { display: flex; justify-content: space-between; margin-top: 4px; font-family: var(--font-number); font-size: 11px; color: var(--color-tertiary); font-variant-numeric: tabular-nums; }
+.fill { height: 100%; background: var(--color-accent); border-radius: 3px; transition: width 150ms ease-out; }
+.progress-labels { display: flex; justify-content: space-between; margin-top: 4px; font-family: var(--font-number); font-size: 12px; color: var(--color-tertiary); font-variant-numeric: tabular-nums; }
 
-.metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); margin-top: var(--space-4); }
-.metric { min-width: 0; padding: 8px 10px; border-radius: var(--radius-tile); background: var(--color-elevated); }
+.metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: var(--space-4); border-top: 1px solid var(--color-border); }
+.metric { min-width: 0; padding: 8px 10px 8px 0; }
+.metric:nth-child(odd) { border-right: 1px solid var(--color-border); padding-right: 10px; }
+.metric:nth-child(even) { padding-left: 10px; }
+.metric:nth-child(n + 3) { border-top: 1px solid var(--color-border); }
 .metric dt { font-size: var(--font-small); color: var(--color-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .metric dd { display: flex; align-items: baseline; gap: 3px; min-width: 0; }
 .metric .v { min-width: 0; font-family: var(--font-number); font-size: 20px; font-weight: 600; color: var(--color-heading); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .metric .v.eta { font-size: 16px; }
 .metric small { flex: none; font-size: var(--font-small); color: var(--color-tertiary); }
-.coords { margin-top: var(--space-3); font-size: 11px; color: var(--color-tertiary); line-height: 1.5; }
+.coords { margin-top: var(--space-3); font-size: 12px; color: var(--color-tertiary); line-height: 1.5; font-variant-numeric: tabular-nums; }
 </style>

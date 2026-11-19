@@ -47,7 +47,7 @@ const max = computed(() => Math.max(1, ...rows.value.map((r) => r.value)))
   --rank-name-width: 9em;
 }
 .grid :deep(.rank-row) { cursor: pointer; }
-.rank-move { transition: transform 0.5s ease; }
+.rank-move { transition: transform 150ms ease-out; }
 @media (max-width: 767px) {
   .grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: repeat(8, minmax(28px, 1fr)); grid-auto-flow: row; column-gap: 0; }
 }

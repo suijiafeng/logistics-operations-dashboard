@@ -19,7 +19,7 @@ const grid = ref<HTMLElement | null>(null)
 const columns = ref(5)
 let observer: ResizeObserver | undefined
 const MIN_TILE = 104
-const GAP = 8
+const GAP = 1
 function measure() {
   const w = grid.value?.clientWidth ?? 0
   if (w > 0) columns.value = Math.max(1, Math.floor((w + GAP) / (MIN_TILE + GAP)))
@@ -67,20 +67,23 @@ onBeforeUnmount(() => observer?.disconnect())
   display: grid;
   grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
   grid-template-rows: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  gap: 1px;
+  background: var(--color-border);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  overflow: hidden;
 }
 .tile {
   container-type: size;
   min-width: 0;
   padding: 0 10px;
-  border-radius: var(--radius-tile);
-  background: var(--color-elevated);
-  border: 1px solid transparent;
+  background: var(--color-panel);
+  border: 0;
   cursor: pointer;
 }
 .tile:hover { background: var(--color-hover); }
-.tile.hot { border-color: rgba(240, 82, 77, 0.7); }
-.tile.selected { border-color: var(--color-accent); }
+.tile.hot { box-shadow: inset 0 0 0 1px var(--color-danger); }
+.tile.selected { box-shadow: inset 0 0 0 1px var(--color-accent); }
 .body { height: 100%; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 2px; }
 .top { display: flex; align-items: baseline; gap: var(--space-1); min-width: 0; line-height: 20px; }
 .name { min-width: 0; font-size: var(--font-small); color: var(--color-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -93,7 +96,7 @@ onBeforeUnmount(() => observer?.disconnect())
   font-variant-numeric: tabular-nums;
 }
 .hot .val { color: var(--color-danger); }
-.backlog { min-width: 0; font-size: 11px; line-height: 14px; color: var(--color-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.backlog { min-width: 0; font-size: 12px; line-height: 16px; color: var(--color-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .backlog em { font-style: normal; color: var(--color-dangerText); }
 /* 「高负载」是状态文字，任何高度都保留（不只靠红框表达告警）；可隐藏的只有积压数，
    积压数仍在 aria-label 与悬停提示中。两行放不下时高负载方块改为单行：利用率后直接跟状态文字 */

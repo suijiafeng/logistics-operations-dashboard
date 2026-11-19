@@ -1,10 +1,17 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useDashboardStore } from '../stores/dashboard'
 import { useMediaQuery } from '../services/useMediaQuery'
+import MenuSelect from './MenuSelect.vue'
 const store = useDashboardStore()
 const reducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)')
-function changeQuality(event: Event) {
-  const value = (event.target as HTMLSelectElement).value
+const qualityOptions = computed(() => [
+  { value: 'auto', label: `自动（当前 ${store.quality}）` },
+  { value: 'full', label: '完整' },
+  { value: 'balanced', label: '均衡' },
+  { value: 'low', label: '低负载' },
+])
+function changeQuality(value: string) {
   store.autoQuality = value === 'auto'
   if (value === 'full' || value === 'balanced' || value === 'low') store.quality = value
   store.qualityReason = store.autoQuality ? '自动画质已启用' : '手动画质'
@@ -30,9 +37,9 @@ async function toggleFullscreen() {
       <button :aria-pressed="store.hudOn" @click="store.toggleHud()">性能 HUD：{{ store.hudOn ? '开' : '关' }}（H）</button>
       <button :aria-pressed="store.decorationsOn && !reducedMotion" :disabled="reducedMotion"
         @click="store.decorationsOn = !store.decorationsOn">{{ reducedMotion ? '系统已减少动态效果' : `装饰动效：${store.decorationsOn ? '开' : '关'}` }}</button>
-      <label>画质 <select :value="store.autoQuality ? 'auto' : store.quality" @change="changeQuality">
-        <option value="auto">自动（当前 {{ store.quality }}）</option><option value="full">完整</option><option value="balanced">均衡</option><option value="low">低负载</option>
-      </select></label>
+      <label class="quality">画质
+        <MenuSelect :model-value="store.autoQuality ? 'auto' : store.quality" ariaLabel="画质" :options="qualityOptions" @update:model-value="changeQuality" />
+      </label>
       <span>轮播只展示仿真数据；人工操作优先。</span>
     </div>
   </details>
@@ -51,11 +58,12 @@ summary {
 }
 summary::-webkit-details-marker { display: none; }
 summary:hover, details[open] summary { background: var(--color-hover); color: var(--color-secondary); }
-summary:focus-visible { outline: 2px solid var(--color-barLight); }
+summary:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 summary svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; }
 .menu { position: fixed; left: var(--space-6); top: 64px; width: 288px; display: grid; gap: 8px; padding: 12px; background: var(--color-panel); border: 1px solid var(--color-border); border-radius: var(--radius-panel); z-index: 100; box-shadow: var(--shadow-panel); }
-button, select { background: var(--color-canvas); color: var(--color-text); border: 1px solid var(--color-border); padding: 6px; border-radius: 4px; cursor: pointer; text-align: left; }
+button { background: var(--color-canvas); color: var(--color-text); border: 1px solid var(--color-border); padding: 6px; border-radius: var(--radius-control); cursor: pointer; text-align: left; }
 button:disabled { color: var(--color-tertiary); cursor: default; }
 label { font-size: var(--font-small); color: var(--color-secondary); display: flex; align-items: center; gap: var(--space-2); }
+.quality { min-width: 0; }
 span { font-size: 12px; color: var(--color-tertiary); white-space: normal; }
 </style>

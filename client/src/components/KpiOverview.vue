@@ -32,14 +32,16 @@ const items = computed(() => {
 </template>
 
 <style scoped>
-.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .tile {
   container-type: inline-size;
   min-width: 0;
-  padding: 10px 14px 12px;
-  border-radius: var(--radius-tile);
-  background: var(--color-elevated);
+  padding: 8px 12px 8px 0;
+  background: transparent;
 }
+.tile:nth-child(odd) { border-right: 1px solid var(--color-border); padding-right: 12px; }
+.tile:nth-child(even) { padding-left: 12px; }
+.tile:nth-child(n + 3) { border-top: 1px solid var(--color-border); }
 dt { font-size: 13px; color: var(--color-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 dd { display: flex; align-items: baseline; gap: var(--space-1); min-width: 0; margin-top: 2px; }
 .value {
@@ -60,14 +62,14 @@ dd { display: flex; align-items: baseline; gap: var(--space-1); min-width: 0; ma
 small { flex: none; font-size: var(--font-body); color: var(--color-tertiary); }
 /* 紧凑布局（1600 宽以下或 980 高以下）：卡片收紧，把高度让给运单链路与分时柱图；矮屏再收一档 */
 @media (max-width: 1599px), (max-height: 980px) {
-  .tile { padding: 6px 12px 6px; }
+  .tile { padding-block: 4px; }
   dt { font-size: var(--font-small); }
   .value { font-size: 22px; font-size: clamp(16px, 13cqw, 22px); }
 }
 @media (max-height: 820px) {
   .grid { gap: 4px; }
   .tile { padding: 2px 10px 3px; }
-  dt { font-size: 11px; line-height: 1.3; }
+  dt { font-size: 12px; line-height: 1.3; }
   .value { font-size: 18px; font-size: clamp(15px, 11cqw, 18px); }
   small { font-size: var(--font-small); }
 }

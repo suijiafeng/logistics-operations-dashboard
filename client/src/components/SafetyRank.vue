@@ -42,12 +42,13 @@ function tone(score: number) { return score < 80 ? 'danger' : score < 90 ? 'warn
 
 <style scoped>
 .safety { display: flex; flex-direction: column; flex: 1; min-height: 0; gap: 6px; }
-.tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
-.tile { min-width: 0; padding: 4px 8px; border-radius: var(--radius-tile); background: var(--color-elevated); }
-.tile dt { font-size: 11px; color: var(--color-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.tile { min-width: 0; padding: 2px 8px; border-right: 1px solid var(--color-border); }
+.tile:last-child { border-right: 0; }
+.tile dt { font-size: 12px; color: var(--color-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tile dd { font-family: var(--font-number); font-size: 16px; font-weight: 600; color: var(--color-heading); font-variant-numeric: tabular-nums; }
 .tile dd.warn { color: var(--color-dangerText); }
-.tile small { margin-left: 2px; font-size: 11px; font-weight: 400; color: var(--color-tertiary); }
+.tile small { margin-left: 2px; font-size: 12px; font-weight: 400; color: var(--color-tertiary); }
 .list { list-style: none; flex: 1; min-height: 0; overflow: hidden; display: grid; grid-auto-rows: minmax(0, 1fr); }
 .row {
   display: grid;
@@ -67,7 +68,7 @@ function tone(score: number) { return score < 80 ? 'danger' : score < 90 ? 'warn
 }
 .row:hover { background: var(--color-hover); }
 .row.selected { background: var(--color-selected); }
-.rank { font-family: var(--font-number); font-size: 11px; color: var(--color-tertiary); }
+.rank { font-family: var(--font-number); font-size: 12px; color: var(--color-tertiary); font-variant-numeric: tabular-nums; }
 .driver { color: var(--color-heading); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .plate { font-family: var(--font-number); color: var(--color-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bar { height: 4px; background: var(--color-track); border-radius: 2px; overflow: hidden; }
@@ -77,6 +78,6 @@ function tone(score: number) { return score < 80 ? 'danger' : score < 90 ? 'warn
 .score { font-family: var(--font-number); font-variant-numeric: tabular-nums; color: var(--color-heading); text-align: right; }
 .score.warn { color: var(--color-warning); }
 .score.danger { color: var(--color-dangerText); }
-.counts { font-size: 11px; color: var(--color-tertiary); white-space: nowrap; }
+.counts { font-size: 12px; color: var(--color-tertiary); white-space: nowrap; }
 .empty { color: var(--color-secondary); font-size: var(--font-small); }
 </style>

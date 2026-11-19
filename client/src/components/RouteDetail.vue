@@ -144,8 +144,8 @@ h4 { font-size: 18px; font-weight: 700; color: var(--color-heading); white-space
   flex-direction: column;
   align-items: flex-start;
   gap: 2px;
-  background: var(--color-elevated);
-  border: 1px solid transparent;
+  background: transparent;
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-control);
   color: var(--color-heading);
   text-align: left;
@@ -153,17 +153,20 @@ h4 { font-size: 18px; font-weight: 700; color: var(--color-heading); white-space
 }
 .hub:hover { border-color: var(--color-border); background: var(--color-hover); }
 .hub b { font-size: var(--font-body); font-weight: 600; }
-.hub span { max-width: 100%; font-size: 11px; color: var(--color-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hub span { max-width: 100%; font-size: 12px; color: var(--color-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .arrow { align-self: center; flex: none; color: var(--color-accent); font-weight: 700; }
 
-.metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); margin-top: var(--space-4); }
-.metric { container-type: inline-size; min-width: 0; padding: 8px 10px; border-radius: var(--radius-tile); background: var(--color-elevated); }
+.metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: var(--space-4); border-top: 1px solid var(--color-border); }
+.metric { container-type: inline-size; min-width: 0; padding: 8px 10px 8px 0; }
+.metric:nth-child(odd) { border-right: 1px solid var(--color-border); padding-right: 10px; }
+.metric:nth-child(even) { padding-left: 10px; }
+.metric:nth-child(n + 3) { border-top: 1px solid var(--color-border); }
 .metric dt { font-size: var(--font-small); color: var(--color-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .metric dd { display: flex; align-items: baseline; gap: 3px; min-width: 0; }
 .metric .v { min-width: 0; font-family: var(--font-number); font-size: 20px; font-size: clamp(15px, 17cqw, 20px); font-weight: 600; color: var(--color-heading); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .metric .v.warn { color: var(--color-dangerText); }
 .metric small { flex: none; font-size: var(--font-small); color: var(--color-tertiary); }
-.note { margin-top: var(--space-3); font-size: 11px; color: var(--color-tertiary); line-height: 1.5; }
+.note { margin-top: var(--space-3); font-size: 12px; color: var(--color-tertiary); line-height: 1.5; }
 
 .block { margin-top: var(--space-4); padding-top: var(--space-3); border-top: 1px solid var(--color-track); }
 h5 { font-size: 13px; font-weight: 500; color: var(--color-secondary); margin-bottom: var(--space-2); }
@@ -190,7 +193,7 @@ h5 { font-size: 13px; font-weight: 500; color: var(--color-secondary); margin-bo
 .ev-main { flex: 1; min-width: 0; display: flex; gap: var(--space-2); font-size: var(--font-small); white-space: nowrap; overflow: hidden; }
 .ev-main b { flex: none; font-weight: 500; color: var(--color-heading); }
 .ev-main span { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--color-secondary); font-family: var(--font-number); }
-.event-link time { flex: none; font-family: var(--font-number); font-size: 11px; color: var(--color-tertiary); }
+.event-link time { flex: none; font-family: var(--font-number); font-size: 12px; color: var(--color-tertiary); }
 .plates { display: flex; flex-wrap: wrap; gap: 6px; }
 .plate {
   display: inline-flex;
@@ -199,7 +202,7 @@ h5 { font-size: 13px; font-weight: 500; color: var(--color-secondary); margin-bo
   min-height: 28px;
   padding: 0 10px;
   border: 1px solid var(--color-border);
-  border-radius: 14px;
+  border-radius: var(--radius-control);
   background: transparent;
   color: var(--color-secondary);
   font-family: var(--font-number);
@@ -208,6 +211,6 @@ h5 { font-size: 13px; font-weight: 500; color: var(--color-secondary); margin-bo
   cursor: pointer;
 }
 .plate:hover { background: var(--color-hover); color: var(--color-heading); }
-.plate.alert { border-color: rgba(240, 82, 77, 0.7); color: var(--color-dangerText); }
+.plate.alert { border-color: var(--color-danger); color: var(--color-dangerText); }
 .plate .sev { position: static; margin: 0; }
 </style>

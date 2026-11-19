@@ -45,12 +45,13 @@ function duration(since: number) {
 
 <style scoped>
 .cold { display: flex; flex-direction: column; flex: 1; min-height: 0; gap: 6px; }
-.tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
-.tile { min-width: 0; padding: 4px 8px; border-radius: var(--radius-tile); background: var(--color-elevated); }
-.tile dt { font-size: 11px; color: var(--color-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.tile { min-width: 0; padding: 2px 8px; border-right: 1px solid var(--color-border); }
+.tile:last-child { border-right: 0; }
+.tile dt { font-size: 12px; color: var(--color-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tile dd { font-family: var(--font-number); font-size: 16px; font-weight: 600; color: var(--color-heading); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tile dd.warn { color: var(--color-dangerText); }
-.tile small { margin-left: 2px; font-size: 11px; font-weight: 400; color: var(--color-tertiary); }
+.tile small { margin-left: 2px; font-size: 12px; font-weight: 400; color: var(--color-tertiary); }
 .list { list-style: none; flex: 1; min-height: 0; overflow: hidden; display: grid; grid-auto-rows: minmax(0, 1fr); }
 .row {
   display: grid;
@@ -75,7 +76,7 @@ function duration(since: number) {
 .plate { font-family: var(--font-number); color: var(--color-heading); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .driver { color: var(--color-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .temp { font-family: var(--font-number); color: var(--color-dangerText); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.range { font-family: var(--font-number); font-size: 11px; color: var(--color-tertiary); white-space: nowrap; }
-.since { font-size: 11px; color: var(--color-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right; }
+.range { font-family: var(--font-number); font-size: 12px; color: var(--color-tertiary); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.since { font-size: 12px; color: var(--color-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right; font-variant-numeric: tabular-nums; }
 .empty { color: var(--color-secondary); font-size: var(--font-small); }
 </style>

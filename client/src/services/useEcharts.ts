@@ -70,7 +70,7 @@ export function useEcharts(): { el: Ref<HTMLDivElement | null>; chart: ShallowRe
   function resolutionChanged() { armResolution(); onResize() }
 
   function syncMotion() {
-    chart.value?.setOption({ animation: motion.value, animationDuration: 200, animationDurationUpdate: 300,
+    chart.value?.setOption({ animation: motion.value, animationDuration: 150, animationDurationUpdate: 150,
       textStyle: { fontFamily: FONT.family, fontSize: FONT.small, color: COLORS.secondary } })
   }
   watch(motion, syncMotion)
@@ -115,8 +115,21 @@ export const TEXT = {
   fontSize: FONT.small,
 }
 export const TOOLTIP = {
-  backgroundColor: COLORS.elevated, borderWidth: 0,
+  backgroundColor: COLORS.panel,
+  borderColor: COLORS.border,
+  borderWidth: 1,
   textStyle: { color: COLORS.text, fontSize: FONT.body, fontFamily: FONT.family },
+}
+/** 坐标轴只留刻度文字，不画实线外框 */
+export const AXIS_CLEAN = { axisLine: { show: false }, axisTick: { show: false } }
+/** 仅水平方向的浅色虚线参考线 */
+export const SPLIT_LINE = { lineStyle: { color: COLORS.gridLine, type: [3, 3] as [number, number] } }
+/** 面积从 0.12 渐隐到 0，避免整块色带 */
+export function areaFade(r: number, g: number, b: number) {
+  return new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+    { offset: 0, color: `rgba(${r}, ${g}, ${b}, 0.12)` },
+    { offset: 1, color: `rgba(${r}, ${g}, ${b}, 0)` },
+  ])
 }
 export const ACCENT = COLORS.accent
 export const GREEN = COLORS.success

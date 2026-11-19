@@ -34,7 +34,7 @@ const extra = computed(() => s.value
   <Panel title="运单链路" :extra="extra">
     <ol v-if="stages.length" class="funnel" aria-label="运单五段漏斗">
       <li v-for="(st, i) in stages" :key="st.name" class="stage" :class="{ last: st.last }">
-        <span v-if="i > 0" class="conv" :title="`由${stages[i - 1]!.name}到${st.name}的转化率`">{{ st.conv }}%</span>
+        <span class="conv" :title="i > 0 ? `由${stages[i - 1]!.name}到${st.name}的转化率` : '首段'">{{ i > 0 ? `${st.conv}%` : ' ' }}</span>
         <div class="tile" :title="`${st.name}：今日累计 ${fmtInt(st.total)} 单，占揽收 ${st.pct}%${st.last ? '' : `，当前在制 ${fmtInt(st.inStage)} 单`}`">
           <span class="name">{{ st.name }}</span>
           <b class="value">{{ fmtCompact(st.total) }}</b>
@@ -48,21 +48,15 @@ const extra = computed(() => s.value
 </template>
 
 <style scoped>
-.funnel { list-style: none; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
+.funnel { list-style: none; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .stage { position: relative; min-width: 0; }
 .conv {
-  position: absolute;
-  left: -2px;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 1;
-  padding: 0 4px;
-  border-radius: 7px;
-  background: var(--color-panel);
-  border: 1px solid var(--color-track);
+  display: block;
+  min-height: 16px;
+  margin-bottom: 2px;
   font-family: var(--font-number);
-  font-size: 10px;
-  line-height: 14px;
+  font-size: 12px;
+  line-height: 16px;
   color: var(--color-tertiary);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -71,12 +65,11 @@ const extra = computed(() => s.value
   container-type: inline-size;
   display: grid;
   gap: 2px;
-  padding: 8px 8px 6px;
-  border-radius: var(--radius-tile);
-  background: var(--color-elevated);
+  padding: 4px 8px 4px 0;
+  border-right: 1px solid var(--color-border);
   min-width: 0;
 }
-.last .tile { background: var(--color-infoBg); }
+.stage:last-child .tile { border-right: 0; padding-right: 0; }
 .name { font-size: var(--font-small); color: var(--color-secondary); white-space: nowrap; }
 .value {
   font-family: var(--font-number);
@@ -93,7 +86,7 @@ const extra = computed(() => s.value
 .bar { height: 3px; background: var(--color-track); border-radius: 2px; overflow: hidden; }
 .bar i { display: block; height: 100%; background: var(--color-barStrong); }
 .last .bar i { background: var(--color-barLight); }
-small { font-size: 11px; color: var(--color-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+small { font-size: 12px; color: var(--color-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .empty { color: var(--color-secondary); font-size: var(--font-small); }
 @media (max-width: 1599px), (max-height: 980px) {
   .tile { padding: 5px 6px 4px; }
@@ -101,7 +94,7 @@ small { font-size: 11px; color: var(--color-tertiary); white-space: nowrap; over
 }
 @media (max-height: 820px) {
   .tile { padding: 2px 6px; gap: 1px; }
-  .name { font-size: 11px; }
+  .name { font-size: 12px; }
   small { display: none; }
 }
 </style>
