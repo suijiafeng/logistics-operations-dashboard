@@ -6,6 +6,7 @@ import { COLORS, FONT } from '../design/tokens'
 import { useChartMotion } from '../services/useChartMotion'
 import { useMediaQuery } from '../services/useMediaQuery'
 import { useDashboardStore, LAYER_KEYS, ALERT_STATUS_TEXT, isAlertOpen, type LayerKey } from '../stores/dashboard'
+import MenuSelect from './MenuSelect.vue'
 import { useFocus } from '../services/useFocus'
 import { fmtInt } from '../services/format'
 import { HUBS, ROUTES, hubById, hubsInProvince } from '../data/network'
@@ -60,12 +61,12 @@ const mapError = ref('')
 const query = ref('')
 let fedCount = 0 // 首屏分片渐进：已喂入的车辆数
 
-const STATUS_COLORS = [COLORS.vehicle, COLORS.bar, RED] // 在途 / 装卸 / 异常
+const STATUS_COLORS = [COLORS.vehicle, COLORS.dwell, RED] // 在途 / 装卸 / 异常
 const STATUS_SIZES = [4, 4, 6]
 const STATUS_LAYER: LayerKey[] = ['enroute', 'dwell', 'anomaly']
 const STATUS_TEXT = ['在途', '装卸', '异常']
-// 冷链车：青色点；超温车辆另加菱形标记（已告警的红边）
-const COLD = '#3fd1c8'
+// 冷链车：低饱和灰绿点，和在途锌灰、装卸暖灰区分；超温车辆另加菱形标记（已告警的红边）
+const COLD = COLORS.cold
 const DRAWER_SPAN = 300 + 16 * 2 + 8
 
 const LAYER_ROWS: { key: LayerKey; label: string; dot: string }[] = [
@@ -471,12 +472,11 @@ function baseOption() {
         polyline: true,
         lineStyle: { color: COLORS.route, width: 1.2, opacity: 0.9 },
         emphasis: { lineStyle: { width: 4, opacity: 1 } },
-        effect: { show: motion.value, period: 9, trailLength: 0.08, symbolSize: 2, color: COLORS.barLight },
         tooltip: { formatter: routeTooltip },
         data: linesData(),
       },
       {
-        // 冷链车辆：青色散点（异常状态仍走红色异常组）
+        // 冷链车辆：灰绿散点（异常状态仍走红色异常组）
         id: 'veh-cold', type: 'scatter', coordinateSystem: 'geo', zlevel: 2,
         symbolSize: 4, large: true, largeThreshold: 2000, progressive: 3000, progressiveThreshold: 6000,
         itemStyle: { color: COLD, opacity: 0.9 }, emphasis: { disabled: true }, tooltip: { formatter: vehicleTooltip },
@@ -485,7 +485,7 @@ function baseOption() {
       {
         // 超温车辆标记：菱形，已告警的红边；点击追踪
         id: 'cold-marks', type: 'scatter', coordinateSystem: 'geo', zlevel: 5, z: 4,
-        symbol: 'diamond', symbolSize: 12, emphasis: { scale: 1.3 }, tooltip: { formatter: coldTooltip },
+        symbol: 'diamond', symbolSize: 12, emphasis: { scale: false }, tooltip: { formatter: coldTooltip },
         data: coldMarkData(),
       },
       {
@@ -518,14 +518,13 @@ function baseOption() {
       })),
       {
         id: 'hub-focus',
-        type: 'effectScatter',
+        type: 'scatter',
         coordinateSystem: 'geo',
         zlevel: 3,
         z: 1,
         silent: true,
-        symbolSize: 18,
-        rippleEffect: { brushType: 'stroke', scale: 2.6, color: ACCENT },
-        itemStyle: { color: 'rgba(255, 138, 61, 0.25)' },
+        symbolSize: 16,
+        itemStyle: { color: 'transparent', borderColor: ACCENT, borderWidth: 1.5 },
         data: focusData(),
       },
       {
@@ -557,8 +556,8 @@ function baseOption() {
         label: {
           show: true, position: 'right', offset: [8, 22],
           formatter: '{a|珠三角}{b|  7 个网点}',
-          backgroundColor: COLORS.overlay, borderColor: COLORS.border, borderWidth: 1, borderRadius: 10, padding: [3, 8],
-          rich: { a: { color: COLORS.heading, fontSize: FONT.small, fontWeight: 500 }, b: { color: COLORS.tertiary, fontSize: 11 } },
+          backgroundColor: COLORS.overlay, borderColor: COLORS.border, borderWidth: 1, borderRadius: 6, padding: [3, 8],
+          rich: { a: { color: COLORS.heading, fontSize: FONT.small, fontWeight: 500 }, b: { color: COLORS.tertiary, fontSize: FONT.small } },
         },
         emphasis: { disabled: true },
         tooltip: { formatter: '珠三角 7 个网点 · 点击下钻广东' },
@@ -566,7 +565,7 @@ function baseOption() {
       },
       {
         id: 'hub-hit', type: 'scatter', coordinateSystem: 'geo', zlevel: 4,
-        symbolSize: 44, itemStyle: { color: 'rgba(255,138,61,0.001)' },
+        symbolSize: 44, itemStyle: { color: 'rgba(255, 79, 0, 0.01)' },
         emphasis: { disabled: true }, tooltip: { formatter: hubTooltip },
         data: hitData(),
       },
@@ -578,14 +577,14 @@ function baseOption() {
       {
         // 活动告警标记：按级别分形状与颜色，点击定位该事件
         id: 'alert-marks', type: 'scatter', coordinateSystem: 'geo', zlevel: 5, z: 3,
-        emphasis: { scale: 1.3 }, tooltip: { formatter: alertTooltip },
+        emphasis: { scale: false }, tooltip: { formatter: alertTooltip },
         data: alertMarkData(),
       },
       {
         id: 'event-position', type: 'scatter', coordinateSystem: 'geo', zlevel: 6,
         symbol: 'pin', symbolSize: 30, itemStyle: { color: RED },
-        label: { show: true, formatter: '{b}', position: 'top', distance: 4, color: COLORS.heading, fontSize: 11,
-          backgroundColor: 'rgba(87, 32, 29, 0.92)', borderColor: RED, borderWidth: 1, borderRadius: 3, padding: [2, 6] },
+        label: { show: true, formatter: '{b}', position: 'top', distance: 4, color: COLORS.heading, fontSize: FONT.small,
+          backgroundColor: COLORS.dangerBg, borderColor: RED, borderWidth: 1, borderRadius: 6, padding: [2, 6] },
         tooltip: { formatter: (p: { name: string }) => `事件发生位置 · ${p.name}<br/>（事件发生时的位置，不是实时车辆追踪）` }, data: eventPositionData(),
       },
       {
@@ -602,10 +601,10 @@ function baseOption() {
       },
       {
         // 追踪车辆：箭头按行驶朝向旋转，位置每秒随增量包更新
-        id: 'vehicle-focus', type: 'effectScatter', coordinateSystem: 'geo', zlevel: 6,
-        symbol: 'arrow', symbolSize: 18, rippleEffect: { brushType: 'stroke', scale: 2.4, color: ACCENT },
+        id: 'vehicle-focus', type: 'scatter', coordinateSystem: 'geo', zlevel: 6,
+        symbol: 'arrow', symbolSize: 18,
         itemStyle: { color: ACCENT, borderColor: COLORS.canvas, borderWidth: 1 },
-        label: { show: true, formatter: '{b}', position: 'top', distance: 8, color: COLORS.heading, fontSize: 11,
+        label: { show: true, formatter: '{b}', position: 'top', distance: 8, color: COLORS.heading, fontSize: FONT.small,
           backgroundColor: COLORS.overlay, borderColor: ACCENT, borderWidth: 1, borderRadius: 3, padding: [2, 6] },
         emphasis: { disabled: true },
         tooltip: { formatter: (p: { name: string }) => `追踪中 · ${p.name}` },
@@ -652,11 +651,7 @@ function drillTo(adcode: string) {
 // 键盘下钻入口：全国视图面包屑里的省份下拉（Tab 可达），有网点的省份排在前面并标注网点数；鼠标点地图入口照旧
 const provinceOptions = PROVINCES.map((p) => ({ adcode: p.adcode, name: p.name, hubs: hubsInProvince(p.adcode).length }))
   .sort((a, b) => b.hubs - a.hubs || a.adcode.localeCompare(b.adcode))
-function drillBySelect(event: Event) {
-  const select = event.target as HTMLSelectElement
-  if (select.value) drillTo(select.value)
-  select.value = ''
-}
+const provinceMenu = provinceOptions.map((p) => ({ value: p.adcode, label: `${p.name}${p.hubs ? ` · ${p.hubs} 网点` : ''}` }))
 
 /** 鼠标附近 radius 像素内最近的车辆下标（large 模式散点不产生图表点击事件，自行就近拾取），没有返回 -1 */
 function nearestVehicle(x: number, y: number, radius: number) {
@@ -849,10 +844,15 @@ watch(
       </template>
       <template v-else>
         <b>全国</b><span class="sep">›</span>
-        <select class="crumb-select" aria-label="选择省份下钻" title="点击地图任意省份或在此选择省份下钻" @change="drillBySelect">
-          <option value="">点击任意省份下钻</option>
-          <option v-for="p in provinceOptions" :key="p.adcode" :value="p.adcode">{{ p.name }}{{ p.hubs ? ` · ${p.hubs} 网点` : '' }}</option>
-        </select>
+        <MenuSelect
+          class="crumb-select"
+          model-value=""
+          plain
+          ariaLabel="选择省份下钻。点击地图任意省份，或在此选择。"
+          placeholder="选择省份"
+          :options="provinceMenu"
+          @update:model-value="drillTo"
+        />
       </template>
     </nav>
     <form class="search" role="search" :class="{ shifted: drawerOpen }" @submit.prevent="search">
@@ -892,7 +892,7 @@ watch(
   position: relative;
   flex: 1;
   min-height: 0;
-  background: radial-gradient(ellipse at 50% 45%, #0d2142 0%, var(--color-panel) 70%);
+  background: var(--color-panel);
   border: 1px solid var(--color-track);
   border-radius: var(--radius-panel);
   overflow: hidden;
@@ -900,7 +900,7 @@ watch(
 .map-chart {
   position: absolute;
   inset: 0;
-  transition: opacity 0.2s ease;
+  transition: opacity 150ms ease-out;
   touch-action: none;
 }
 .map-chart.switching { opacity: 0.25; }
@@ -918,21 +918,7 @@ watch(
 .crumb b { font-size: 18px; font-weight: 700; color: var(--color-heading); }
 .crumb .sep { color: var(--color-tertiary); }
 .crumb .hint { font-size: 13px; color: var(--color-tertiary); overflow: hidden; text-overflow: ellipsis; }
-/* 省份下拉与提示文字同样式：无边框、同色，聚焦时显示焦点环 */
-.crumb-select {
-  max-width: 100%;
-  padding: 0 2px;
-  background: transparent;
-  border: 0;
-  border-radius: 4px;
-  color: var(--color-tertiary);
-  font: inherit;
-  font-size: 13px;
-  cursor: pointer;
-}
-.crumb-select:hover { color: var(--color-heading); }
-.crumb-select:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; color: var(--color-heading); }
-.crumb-select option { background: var(--color-panel); color: var(--color-text); }
+.crumb-select { max-width: min(220px, 36vw); }
 .crumb-link {
   min-height: 0;
   min-width: 0;
@@ -972,7 +958,7 @@ watch(
   font-size: var(--font-small);
 }
 .search input::placeholder { color: var(--color-tertiary); }
-.search input:focus-visible { outline: 2px solid var(--color-barLight); outline-offset: -2px; border-radius: var(--radius-control); }
+.search input:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; border-radius: var(--radius-control); }
 .search input::-webkit-search-cancel-button { filter: invert(0.7); }
 .search button { min-height: 30px; min-width: 32px; padding: 0; background: transparent; border: 0; border-left: 1px solid var(--color-track); color: var(--color-secondary); font-size: 16px; cursor: pointer; }
 .search button:hover { color: var(--color-heading); background: var(--color-hover); }
@@ -986,7 +972,7 @@ watch(
   height: 128px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-control);
-  background: rgba(8, 19, 42, 0.6);
+  background: var(--color-overlay);
   overflow: hidden;
   pointer-events: none;
   z-index: 2;
@@ -994,7 +980,7 @@ watch(
 /* 网点抽屉固定在右侧时，小图移到抽屉左侧 */
 .scs-inset.shifted { right: calc(300px + var(--space-4) * 2 + 8px); }
 .scs-chart { position: absolute; inset: 0; }
-.scs-inset figcaption { position: absolute; right: 6px; bottom: 4px; font-size: 11px; color: var(--color-tertiary); }
+.scs-inset figcaption { position: absolute; right: 6px; bottom: 4px; font-size: 12px; color: var(--color-tertiary); }
 .map-legend {
   position: absolute;
   left: var(--space-4);
@@ -1045,11 +1031,11 @@ watch(
   flex: none;
 }
 .dot.enroute { background: var(--color-vehicle); }
-.dot.dwell { background: var(--color-bar); }
+.dot.dwell { background: var(--color-dwell); }
 .dot.anomaly { background: var(--color-danger); }
 .dot.route { width: 12px; height: 2px; border-radius: 1px; background: var(--color-barLight); }
 .dot.hub { background: var(--color-secondary); border: 1px solid var(--color-heading); }
-.dot.cold { background: #3fd1c8; }
+.dot.cold { background: var(--color-cold); }
 .dot.alert { width: 0; height: 0; border-radius: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 9px solid var(--color-danger); background: none; }
 @media (max-width: 767px) {
   .map-legend { bottom: var(--space-2); left: var(--space-2); }

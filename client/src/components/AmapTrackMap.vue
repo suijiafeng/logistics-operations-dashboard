@@ -29,16 +29,16 @@ let observer: ResizeObserver | undefined
 let stopWatchingErrors: (() => void) | undefined
 
 const DOT: Record<TrackMarker['kind'], string> = {
-  origin: COLORS.success,
-  transfer: COLORS.warning,
-  destination: COLORS.danger,
-  stay: COLORS.warning,
+  origin: COLORS.vehicle,
+  transfer: COLORS.dwell,
+  destination: COLORS.accent,
+  stay: COLORS.dwell,
 }
 
 function pinHtml(marker: TrackMarker) {
   return `<div style="position:relative;width:0;height:0;font:12px/1.2 ${FONT.family};color:${COLORS.text}">
     <span style="position:absolute;left:-6px;top:-6px;width:12px;height:12px;border-radius:50%;background:${DOT[marker.kind]};box-shadow:0 0 0 2px ${COLORS.panel}"></span>
-    <span style="position:absolute;left:10px;top:-9px;white-space:nowrap;background:rgba(8,19,42,0.9);padding:1px 6px;border-radius:3px">${marker.text}</span>
+    <span style="position:absolute;left:10px;top:-9px;white-space:nowrap;background:${COLORS.overlay};border:1px solid ${COLORS.border};padding:1px 6px;border-radius:6px">${marker.text}</span>
   </div>`
 }
 
@@ -166,9 +166,9 @@ function addAdminLabels(namespace: AMapNamespace, target: AMapMap) {
         depth: 2,
         styles: {
           fill: 'rgba(0, 0, 0, 0)',
-          'province-stroke': 'rgba(91, 166, 238, 0.28)',
-          'city-stroke': 'rgba(156, 182, 214, 0.5)',
-          'county-stroke': 'rgba(156, 182, 214, 0.32)',
+          'province-stroke': 'rgba(255, 255, 255, 0.22)',
+          'city-stroke': 'rgba(255, 255, 255, 0.16)',
+          'county-stroke': 'rgba(255, 255, 255, 0.1)',
           'stroke-width': 1,
         },
       }))
@@ -206,8 +206,8 @@ function addAdminLabels(namespace: AMapNamespace, target: AMapMap) {
           direction: 'center',
           style: {
             fontSize: label.fontSize,
-            fillColor: '#e8f1fc',
-            strokeColor: '#041018',
+            fillColor: COLORS.text,
+            strokeColor: COLORS.canvas,
             strokeWidth: 2,
             fontWeight: label.rank >= 200 ? 'bold' : 'normal',
           },

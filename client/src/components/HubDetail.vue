@@ -7,6 +7,7 @@ import { ROUTES, hubById } from '../data/network'
 import { provinceName } from '../data/provinces'
 import { fmtCompact, fmtInt } from '../services/format'
 import { ALERT_STATUS_TEXT, isAlertOpen } from '../stores/dashboard'
+import HubOrdersChart from './HubOrdersChart.vue'
 
 const BACKLOG_WARN = 650
 const LEVEL_TEXT = ['', '一级枢纽', '二级枢纽', '三级网点']
@@ -32,7 +33,6 @@ const PEER_LIMIT = 6
 const showAllPeers = ref(false)
 watch(() => store.selectedHubId, () => { showAllPeers.value = false })
 const shownRoutes = computed(() => showAllPeers.value ? routes.value : routes.value.slice(0, PEER_LIMIT))
-const maxOrders = computed(() => Math.max(1, ...(hub.value?.recentOrders ?? [])))
 const metrics = computed(() => {
   const h = hub.value
   if (!h) return []
@@ -79,10 +79,7 @@ function jump(id: string) {
 
     <section class="block">
       <h5>近 1 小时关联运单 · 5 分钟</h5>
-      <div v-if="hub.recentOrders?.length" class="mini-chart" role="img" :aria-label="`近一小时关联运单：${hub.recentOrders.join('、')}`">
-        <div v-for="(value, i) in hub.recentOrders" :key="i" class="bucket" :class="{ current: i === hub.recentOrders.length - 1 }"
-          :title="`${hub.recentLabels?.[i] ?? ''}：${fmtInt(value)} 单`"><i :style="{ height: `${value / maxOrders * 100}%` }" /></div>
-      </div>
+      <HubOrdersChart v-if="hub.recentOrders?.length" :orders="hub.recentOrders" :labels="hub.recentLabels" />
       <div v-if="hub.recentLabels?.length" class="chart-labels"><span>{{ hub.recentLabels[0] }}</span><span>{{ hub.recentLabels[hub.recentLabels.length - 1] }} 累计中</span></div>
       <p class="note">统计进出该网点的关联运单，跨网点不可相加。</p>
     </section>
@@ -138,8 +135,11 @@ h4 { font-size: 18px; font-weight: 700; color: var(--color-heading); white-space
 .close { flex: none; background: none; border: none; color: var(--color-tertiary); font-size: 18px; line-height: 1; cursor: pointer; border-radius: var(--radius-control); }
 .close:hover { background: var(--color-hover); color: var(--color-heading); }
 
-.metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); margin-top: var(--space-4); }
-.metric { container-type: inline-size; min-width: 0; padding: 8px 10px; border-radius: var(--radius-tile); background: var(--color-elevated); }
+.metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: var(--space-4); border-top: 1px solid var(--color-border); }
+.metric { container-type: inline-size; min-width: 0; padding: 8px 10px 8px 0; }
+.metric:nth-child(odd) { border-right: 1px solid var(--color-border); padding-right: 10px; }
+.metric:nth-child(even) { padding-left: 10px; }
+.metric:nth-child(n + 3) { border-top: 1px solid var(--color-border); }
 .metric dt { font-size: var(--font-small); color: var(--color-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .metric dd { display: flex; align-items: baseline; gap: 3px; min-width: 0; }
 .metric .v {
@@ -163,16 +163,12 @@ h4 { font-size: 18px; font-weight: 700; color: var(--color-heading); white-space
 .util-head b.hot, .hot-tag { color: var(--color-dangerText); }
 .hot-tag { font-style: normal; font-size: var(--font-small); margin-left: var(--space-2); }
 .bar { height: 6px; background: var(--color-track); border-radius: 3px; overflow: hidden; }
-.fill { height: 100%; background: var(--color-barLight); border-radius: 3px; transition: width 0.6s ease; }
+.fill { height: 100%; background: var(--color-barLight); border-radius: 3px; transition: width 150ms ease-out; }
 .fill.hot { background: var(--color-danger); }
 
 .block { margin-top: var(--space-4); padding-top: var(--space-3); border-top: 1px solid var(--color-track); }
 h5 { font-size: 13px; font-weight: 500; color: var(--color-secondary); margin-bottom: var(--space-2); }
-.mini-chart { display: flex; align-items: flex-end; height: 56px; gap: 4px; }
-.bucket { height: 100%; flex: 1; display: flex; align-items: flex-end; }
-.bucket i { display: block; width: 100%; min-height: 2px; background: var(--color-barStrong); border-radius: 2px 2px 0 0; }
-.bucket.current i { background: var(--color-accentArea); outline: 1px dashed var(--color-accent); outline-offset: -1px; }
-.chart-labels { display: flex; justify-content: space-between; margin-top: 4px; font-family: var(--font-number); font-size: 11px; color: var(--color-tertiary); }
+.chart-labels { display: flex; justify-content: space-between; margin-top: 4px; font-family: var(--font-number); font-size: 12px; color: var(--color-tertiary); }
 .note { margin-top: var(--space-1); font-size: var(--font-small); color: var(--color-tertiary); line-height: 1.5; }
 
 .event-link {
@@ -198,8 +194,8 @@ h5 { font-size: 13px; font-weight: 500; color: var(--color-secondary); margin-bo
 .ev-main { flex: 1; min-width: 0; display: flex; gap: var(--space-2); font-size: var(--font-small); white-space: nowrap; overflow: hidden; }
 .ev-main b { flex: none; font-weight: 500; color: var(--color-heading); }
 .ev-main span { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--color-secondary); }
-.event-link time { flex: none; font-family: var(--font-number); font-size: 11px; color: var(--color-tertiary); }
-.chip { flex: none; padding: 0 6px; border-radius: 8px; font-size: 10px; line-height: 15px; background: var(--color-elevated); color: var(--color-secondary); }
+.event-link time { flex: none; font-family: var(--font-number); font-size: 12px; color: var(--color-tertiary); }
+.chip { flex: none; padding: 0 6px; border-radius: 999px; font-size: 12px; line-height: 18px; background: var(--color-elevated); color: var(--color-secondary); }
 .chip.st-handling { color: var(--color-warning); }
 .chip.st-closed { color: var(--color-tertiary); }
 
@@ -209,7 +205,7 @@ h5 { font-size: 13px; font-weight: 500; color: var(--color-secondary); margin-bo
   max-width: 100%;
   padding: 0 10px;
   border: 1px solid var(--color-border);
-  border-radius: 14px;
+  border-radius: var(--radius-control);
   background: transparent;
   color: var(--color-secondary);
   font-size: var(--font-small);

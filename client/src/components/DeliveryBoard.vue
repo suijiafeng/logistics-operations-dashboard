@@ -211,13 +211,13 @@ onBeforeUnmount(() => {
 }
 .back { padding: 0 var(--space-3); background: transparent; color: var(--color-accentText); border: 1px solid var(--color-border); border-radius: var(--radius-control); cursor: pointer; }
 .title { display: flex; align-items: center; gap: var(--space-2); min-width: 0; flex: 1; }
-h1 { font-size: var(--font-page); font-weight: 700; letter-spacing: 0.06em; white-space: nowrap; }
+h1 { font-size: var(--font-page); font-weight: 600; letter-spacing: normal; white-space: nowrap; }
 .tag, .plate {
   flex: none;
   font-size: var(--font-small);
   color: var(--color-secondary);
   border: 1px solid var(--color-border);
-  border-radius: 3px;
+  border-radius: var(--radius-control);
   padding: 0 var(--space-2);
   line-height: 20px;
 }
@@ -258,9 +258,9 @@ h1 { font-size: var(--font-page); font-weight: 700; letter-spacing: 0.06em; whit
 .swatch.traveled { background: var(--color-accent); }
 .swatch.track { background: var(--color-barLight); opacity: 0.7; }
 .dot { width: 8px; height: 8px; border-radius: 50%; }
-.dot.origin { background: var(--color-success); }
-.dot.transfer { background: var(--color-warning); }
-.dot.end { background: var(--color-danger); }
+.dot.origin { background: var(--color-vehicle); }
+.dot.transfer { background: var(--color-dwell); }
+.dot.end { background: var(--color-accent); }
 .arrow { width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-bottom: 9px solid var(--color-accent); }
 .playback { display: flex; align-items: center; gap: var(--space-3); margin-top: var(--space-2); }
 .playback button { padding: 0 var(--space-3); background: var(--color-elevated); color: var(--color-heading); border: 1px solid var(--color-border); border-radius: var(--radius-control); cursor: pointer; }

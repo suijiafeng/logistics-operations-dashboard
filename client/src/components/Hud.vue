@@ -31,6 +31,7 @@ const store = useDashboardStore()
   bottom: 160px;
   width: 196px;
   background: var(--color-hud);
+  border: 1px solid var(--color-border);
   border-radius: var(--radius-panel);
   padding: var(--space-2) var(--space-3);
   font-size: var(--font-small);
@@ -38,9 +39,9 @@ const store = useDashboardStore()
   pointer-events: none;
 }
 .hud-title {
-  color: var(--color-accentText);
+  color: var(--color-secondary);
   font-weight: 600;
-  letter-spacing: 1px;
+  letter-spacing: normal;
   margin-bottom: var(--space-2);
 }
 .quality-note { color: var(--color-secondary); font-size: var(--font-small); margin-block: var(--space-1); }

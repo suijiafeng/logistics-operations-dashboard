@@ -46,9 +46,9 @@ function render() {
       layoutIterations: 32,
       label: { ...TEXT, fontSize: FONT.small, color: COLORS.text, formatter: (p: { data?: { title?: string } }) => p.data?.title ?? '' },
       itemStyle: { color: COLORS.barStrong, borderWidth: 0 },
-      lineStyle: { color: 'gradient', opacity: 0.32, curveness: 0.5 },
+      lineStyle: { color: COLORS.secondary, opacity: 0.28, curveness: 0.35 },
       emphasis: { focus: 'adjacency', lineStyle: { opacity: 0.6 } },
-      data: [...nodes.values()].map((n) => ({ name: n.name, title: n.title, itemStyle: { color: n.side === 'out' ? COLORS.barStrong : COLORS.barLight },
+      data: [...nodes.values()].map((n) => ({ name: n.name, title: n.title, itemStyle: { color: n.side === 'out' ? COLORS.bar : COLORS.barLight },
         // 右列节点标签放在节点左侧，不被面板边缘裁掉
         ...(n.side === 'in' ? { label: { position: 'left' } } : {}) })),
       links: list.map((f) => ({ source: `${f.from}>`, target: `>${f.to}`, value: f.value })),

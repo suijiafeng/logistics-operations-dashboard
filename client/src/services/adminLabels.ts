@@ -29,7 +29,7 @@ const LEVELS: Record<string, { zooms: [number, number]; rank: number; fontSize: 
   province: { zooms: [4, 8], rank: 300, fontSize: 16 },
   city: { zooms: [7, 18], rank: 200, fontSize: 15 },
   district: { zooms: [9, 15], rank: 40, fontSize: 12 },
-  street: { zooms: [13, 18], rank: 8, fontSize: 11 },
+  street: { zooms: [13, 18], rank: 8, fontSize: 12 },
 }
 
 export function parseCenter(center: unknown): [number, number] | null {

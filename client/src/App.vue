@@ -122,24 +122,14 @@ body {
   color: var(--color-text);
   -webkit-font-smoothing: antialiased;
 }
-button:focus-visible, [role='button']:focus-visible {
-  outline: 2px solid var(--color-accentText);
-  outline-offset: -2px;
-}
 button { font: inherit; }
 button, [role='button'] { min-height: var(--control-size); }
 button { min-width: var(--control-size); }
 .interactive-row:hover { background: var(--color-hover); }
 .interactive-row.selected { background: var(--color-selected); box-shadow: inset 2px 0 var(--color-accent); }
-.interactive-row:focus-visible, .tile:focus-visible { outline: 2px solid var(--color-barLight); outline-offset: -2px; }
-button:focus-visible, [role='button']:focus-visible {
-  background: var(--color-infoBg);
-  color: var(--color-heading);
-  outline-offset: -3px;
-  box-shadow: inset 0 0 0 2px var(--color-panel);
-  border-radius: var(--radius-control);
-  position: relative;
-  z-index: 2;
+button:focus-visible, [role='button']:focus-visible, .interactive-row:focus-visible, .tile:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 .motion-off *, .motion-off *::before, .motion-off *::after { animation: none !important; transition: none !important; }
 @media (prefers-reduced-motion: reduce) {

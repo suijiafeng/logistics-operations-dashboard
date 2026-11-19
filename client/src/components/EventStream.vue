@@ -105,9 +105,12 @@ onBeforeUnmount(() => { observer?.disconnect(); resetFresh() })
       <span class="hint">点击定位 · 定位后可处置</span>
     </div>
     <div ref="stream" class="stream">
-      <p v-if="store.hasData && filtered.length === 0" class="empty">{{ store.alertFilter === 'pending' ? '暂无待处理告警。' : '本次连接暂无新事件。' }}</p>
+      <p v-if="store.hasData && filtered.length === 0" class="empty">
+        {{ store.alertFilter === 'pending' ? '暂无待处理告警。' : '本次连接暂无新事件。' }}
+        <button v-if="store.alertFilter === 'pending'" type="button" class="reset" @click="store.alertFilter = 'all'">查看全部告警</button>
+      </p>
       <!-- 显式时长：离场立即移除，否则高亮行的闪烁动画会被当作离场动画，被删掉的行残留数秒 -->
-      <TransitionGroup name="evt" tag="ul" class="list" :duration="{ enter: 350, leave: 0 }">
+      <TransitionGroup name="evt" tag="ul" class="list" :duration="{ enter: 150, leave: 0 }">
         <li v-for="e in visibleEvents" :key="e.id" class="item" role="button" tabindex="0"
           :class="[`st-${e.status ?? 'open'}`, { active: store.activeEvent?.id === e.id, fresh: fresh.has(e.id), closed: e.status === 'closed' }]"
           :aria-label="`${LEVEL_TEXT[e.level] ?? '提醒'}，${e.type}，${e.vehicle}，${e.place}，${ALERT_STATUS_TEXT[e.status ?? 'open']}，责任网点${ownerName(e)}，${e.desc}，点击定位事件线路和发生位置`"
@@ -148,15 +151,15 @@ onBeforeUnmount(() => { observer?.disconnect(); resetFresh() })
   min-width: 0;
   padding: 0 10px;
   border: 1px solid var(--color-border);
-  border-radius: 13px;
+  border-radius: var(--radius-control);
   background: transparent;
   color: var(--color-secondary);
   font-size: var(--font-small);
   font-variant-numeric: tabular-nums;
   cursor: pointer;
 }
-.filters button.on { background: var(--color-infoBg); border-color: var(--color-barLight); color: var(--color-heading); }
-.toolbar .hint { font-size: 11px; color: var(--color-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.filters button.on { background: var(--color-selected); border-color: var(--color-accent); color: var(--color-heading); }
+.toolbar .hint { font-size: 12px; color: var(--color-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .stream {
   flex: 1;
   min-height: 0;
@@ -168,6 +171,19 @@ onBeforeUnmount(() => { observer?.disconnect(); resetFresh() })
   font-size: var(--font-body);
   padding: var(--space-2) var(--space-1);
 }
+.empty .reset {
+  display: inline-flex;
+  margin-left: 8px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--color-text);
+  font-size: var(--font-small);
+  cursor: pointer;
+}
+.empty .reset:hover { background: var(--color-hover); }
 .list { list-style: none; }
 .measure { position: absolute; top: 0; left: 0; right: 0; visibility: hidden; pointer-events: none; list-style: none; }
 .item {
@@ -182,8 +198,8 @@ onBeforeUnmount(() => { observer?.disconnect(); resetFresh() })
 .item.active { background: var(--color-selected); }
 .item.closed { opacity: 0.6; }
 /* 新到严重告警：红底闪 3 次后保持淡红底，8 秒后恢复；减少动态效果时只保留静态淡红底 */
-.item.fresh { background: rgba(240, 82, 77, 0.12); animation: severe-flash 1.2s ease-in-out 3; }
-@keyframes severe-flash { 0%, 100% { background: rgba(240, 82, 77, 0.06); } 50% { background: rgba(240, 82, 77, 0.3); } }
+.item.fresh { background: rgba(229, 72, 77, 0.12); animation: severe-flash 1.2s ease-in-out 3; }
+@keyframes severe-flash { 0%, 100% { background: rgba(229, 72, 77, 0.06); } 50% { background: rgba(229, 72, 77, 0.22); } }
 /* 级别用标题前的小圆点表达，避免整列彩条抢视线 */
 .sev { position: absolute; left: 6px; top: 15px; width: 6px; height: 6px; border-radius: 50%; }
 .lv0 { background: var(--color-border); }
@@ -219,11 +235,11 @@ onBeforeUnmount(() => { observer?.disconnect(); resetFresh() })
   text-overflow: ellipsis;
 }
 /* 状态标签：新建灰、已确认蓝、处理中琥珀（需要关注）、已关闭暗 */
-.status { flex: none; padding: 0 6px; border-radius: 9px; font-size: 11px; line-height: 16px; background: var(--color-elevated); color: var(--color-secondary); }
+.status { flex: none; padding: 0 6px; border-radius: 999px; font-size: 12px; line-height: 18px; background: var(--color-elevated); color: var(--color-secondary); }
 .status.st-acked { background: var(--color-infoBg); color: var(--color-heading); }
 .status.st-handling { background: rgba(246, 180, 64, 0.18); color: var(--color-warning); }
 .status.st-closed { color: var(--color-tertiary); }
-.pin { flex: none; font-size: 11px; color: var(--color-dangerText); }
+.pin { flex: none; font-size: 12px; color: var(--color-dangerText); }
 time {
   flex: none;
   margin-left: auto;
@@ -257,8 +273,8 @@ time {
 }
 .actions button.primary { background: var(--color-accent); border-color: var(--color-accent); color: var(--color-onAccent); font-weight: 500; }
 .actions button:disabled { opacity: 0.5; cursor: default; }
-.actions .by { font-size: 11px; color: var(--color-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.evt-enter-active { transition: all 0.35s ease; }
+.actions .by { font-size: 12px; color: var(--color-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.evt-enter-active { transition: opacity 150ms ease-out, transform 150ms ease-out; }
 .evt-enter-from { opacity: 0; transform: translateY(-8px); }
 /* 紧凑布局隐藏描述行，完整内容由整行悬停提示与 aria-label 提供 */
 @media (max-height: 980px) {

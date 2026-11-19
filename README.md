@@ -29,7 +29,13 @@ npm run install:all   # 安装 client 与 server 依赖（首次）
 npm run dev           # 一键启动：模拟引擎 http://localhost:8787 + 前端 http://localhost:5173
 ```
 
-浏览器打开 http://localhost:5173 即可。开发代理默认转发到 8787 的引擎，可用 `ENGINE_URL=http://localhost:8788 npm run dev:client` 指向其他引擎实例。也可以分开启动：`npm run dev:server` / `npm run dev:client`。
+浏览器打开 http://localhost:5173 即可。模拟引擎默认监听 **8787**，用环境变量 `PORT` 改端口。开发代理把 `/api` 和 `/ws` 转到 `ENGINE_URL`（默认 `http://localhost:8787`）。换端口时两边要写成同一个地址，否则前端仍去连 8787：
+
+```bash
+PORT=8788 ENGINE_URL=http://localhost:8788 npm run dev
+```
+
+分开启动同样成对设置：`PORT=8788 npm run dev:server`，另一个终端 `ENGINE_URL=http://localhost:8788 npm run dev:client`。`npm run preview` 的代理也读 `ENGINE_URL`。不改端口时直接 `npm run dev`，或分开 `npm run dev:server` / `npm run dev:client`。
 
 生产构建：`npm run build`（产物在 `client/dist/`）。同域网关部署时将 `/api`、`/ws` 转发到引擎即可；前后端分域部署时可在构建前设置 `VITE_API_BASE` 与 `VITE_WS_URL`。
 
@@ -101,14 +107,14 @@ HUD 默认关闭，保存上次手动选择；URL 加 `?hud=1` 可强制开启�
 
 ## UI 规范与适配
 
-- 设计变量统一在 `client/src/design/tokens.ts` 定义，应用启动时安装 CSS 自定义属性；DOM 和 ECharts 共用颜色、字体，Tooltip 使用统一配置。主要间距为 8/16/24/32px，细节允许 4/12px；面板圆角 8px，控件圆角 4px。
-- 配色以科技蓝为底：常态数据统一用同一蓝色色阶（按明度分层），红色只表示需要处理，琥珀只表示需要关注，橙色只表示当前焦点（选中、当前小时）。顶栏只放标题、仿真数据标识、连接状态与时间，不放业务数据。
+- 设计变量统一在 `client/src/design/tokens.ts` 定义，应用启动时安装 CSS 自定义属性；DOM 和 ECharts 共用颜色、字体，Tooltip 使用统一配置。主要间距为 8/16/24/32px，细节允许 4/12px；面板圆角 8px，控件圆角 6px。
+- 配色是中性锌灰深色（页面 `#09090B`，面板 `#18181B`），不用发蓝的底和霓虹渐变。常态数据用同一套灰色明度阶梯；唯一强调色是国际橙 `#FF4F00`，只用于当前焦点（选中干线、当前小时、主操作）。红色只表示需要处理，琥珀只表示需要关注。顶栏只放标题、仿真数据标识、连接状态与时间，不放业务数据。
 - 正文 14px、辅助文字和图表轴标签 12px、面板标题 16px、页面标题 22px（紧凑布局 20px）、KPI 28px；数字使用等宽数字。以上均为 1080 基准下的逻辑像素：≤1080 高的屏幕按真实尺寸响应式布局，从不缩小文字；更高的屏幕整页 `zoom` 等比放大（见「播控与屏幕设置」），字号、面板、间距一起变大。1920×1080、1440×900、1366×768 为主要验收尺寸（均一屏放下），2560×1440、3440×1440、3840×2160、5760×1080 已用无头 Chrome 与 Chromium 87 截图验收；较窄屏幕改成纵向布局，空间不足时允许滚动。
 - 缩放实现约束：放大子树内 `vw`/`vh` 会被 zoom 再乘一次，组件里需要视口单位时用逻辑值 `var(--vw)` / `var(--vh)`；按宽度断点的媒体查询只能看到物理尺寸，放大模式下改写为等价的宽高比条件（如逻辑宽 ≥2400 ⇔ 宽高比 ≥20/9）；测量元素尺寸用 `offsetWidth/clientHeight`（逻辑像素），不要用 `getBoundingClientRect`（视觉像素）。Chrome 128 以前的旧版 zoom 语义（含构建目标 Chrome 87）由 `useScreenScale` 统一修正，ECharts 指针坐标由 `useEcharts` 换算回逻辑像素。
 - 数据长度不定：名称、线路、事件描述等单行显示，超长省略并提供悬停全文；数值列按内容自适应宽度；KPI 与网点指标 ≥100 万自动换算为「万/亿」，并随卡片宽度缩小字号（容器查询，旧内核回退为固定字号加省略）；行高固定，告警按实际行高计算可展示条数。
 - 按钮与交互列表行至少 32px 高，按钮至少 32px 宽，统一键盘焦点；高负载仓配方块同时显示「高负载」文字，不单靠颜色表示告警。
 - 首批有效数据前，KPI 显示 `—`，面板显示加载或失败占位；请求失败原因在页面直接展示。断线、消息解析错误或超过 5 秒未收到有效更新时展示「数据已过期」，保留最后有效数据；有效更新到达后自动恢复。数据状态提示与操作反馈（如「已定位」）悬浮在顶栏下方居中，不占布局，断线抖动时页面不跳动。
-- 设置菜单可关闭装饰动效；系统启用 `prefers-reduced-motion` 时自动禁用 CSS 和 ECharts 动画、流线特效及网点涟漪，继续接收和展示实时位置。布局变化由 ResizeObserver 通知图表重排。
+- 设置菜单可关闭图表与界面动效；系统启用 `prefers-reduced-motion` 时同样禁用，继续接收和展示实时位置。干线不画粒子拖尾，选中网点与车辆不用涟漪。布局变化由 ResizeObserver 通知图表重排。
 - 趋势 Tooltip 根据原始时间桶展示唯一数值，区分已完成小时、当前小时累计和暂无数据，避免虚线连接点产生重复描述。
 
 设计依据：[Ant Design 布局](https://ant.design/docs/spec/layout-cn/)、[字体](https://ant.design/docs/spec/font-cn/)、[WCAG 对比度](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum)、[颜色使用](https://www.w3.org/WAI/WCAG22/Understanding/use-of-color.html)。这些是本项目的实现约定，不代表已经完成 WCAG 全项合规认证。
@@ -171,7 +177,7 @@ HUD 默认关闭，保存上次手动选择；URL 加 `?hud=1` 可强制开启�
 2. 增量更新只 `setOption` 替换三组散点 series 的 `data`，从不重建整个图表 option；
 3. 服务端 250ms 步进、**1s 聚合**成一包广播，客户端用 `requestAnimationFrame` 合并同一帧内的多次数据到达；
 4. 位置用扁平数组编码而非对象数组，包体和解析开销都更低；
-5. 干线流线动画做抽稀处理（线路点数固定、低频特效），不让装饰动画抢占散点渲染预算。
+5. 干线只画抽稀后的折线，不叠加粒子拖尾，避免装饰动画抢占散点渲染预算。
 
 ## 目录结构
 
