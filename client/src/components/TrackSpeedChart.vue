@@ -52,11 +52,11 @@ function render() {
       smooth: false,
       showSymbol: false,
       lineStyle: { color: COLORS.barLight, width: 1.5 },
-      areaStyle: { color: areaFade(212, 212, 216) },
+      areaStyle: { color: areaFade(142, 186, 255) },
       data: speedSamples(points).map((sample) => [sample.t, Math.round(sample.speedKmh * 10) / 10]),
       markArea: {
         silent: true,
-        itemStyle: { color: 'rgba(255, 255, 255, 0.06)' },
+        itemStyle: { color: 'rgba(47, 128, 255, 0.10)' },
         label: { show: false },
         data: props.stays.map((stay) => [{ xAxis: stay.startT }, { xAxis: stay.endT }]),
       },

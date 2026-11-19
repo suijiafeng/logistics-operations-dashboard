@@ -166,9 +166,9 @@ function addAdminLabels(namespace: AMapNamespace, target: AMapMap) {
         depth: 2,
         styles: {
           fill: 'rgba(0, 0, 0, 0)',
-          'province-stroke': 'rgba(255, 255, 255, 0.22)',
-          'city-stroke': 'rgba(255, 255, 255, 0.16)',
-          'county-stroke': 'rgba(255, 255, 255, 0.1)',
+          'province-stroke': 'rgba(126, 176, 240, 0.40)',
+          'city-stroke': 'rgba(126, 176, 240, 0.28)',
+          'county-stroke': 'rgba(126, 176, 240, 0.16)',
           'stroke-width': 1,
         },
       }))
@@ -248,7 +248,7 @@ onMounted(() => {
     amap = namespace
     const first = props.points[0]
     // 底色、道路和 POI 标注。楼块和室内图继续关。行政区名和区界另由 DistrictLayer / 行政区查询补上。
-    // 已行驶段是橙色，未行驶段是浅蓝，在官方 darkblue 上对比更清楚。不用 3D、路况或卫星图层。
+    // 已行驶段用强调蓝，未行驶段用浅蓝，在官方 darkblue 上对比更清楚。不用 3D、路况或卫星图层。
     map = new namespace.Map(host.value, {
       viewMode: '2D',
       zoom: 11,

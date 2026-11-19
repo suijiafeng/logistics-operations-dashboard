@@ -47,7 +47,7 @@ function renderTemps() {
       axisLabel: { ...TEXT, fontFamily: FONT.number, formatter: '{value}℃' } },
     series: [{
       type: 'line', data, showSymbol: false, smooth: false,
-      lineStyle: { color: COLORS.cold, width: 1.5 }, areaStyle: { color: areaFade(143, 163, 154) },
+      lineStyle: { color: COLORS.cold, width: 1.5 }, areaStyle: { color: areaFade(94, 184, 201) },
       markArea: { silent: true, itemStyle: { color: 'rgba(52, 199, 123, 0.12)' }, data: [[{ yAxis: t.lo }, { yAxis: t.hi }]] },
       markLine: { silent: true, symbol: 'none', lineStyle: { color: COLORS.secondary, type: 'dashed', width: 1 }, label: { show: false }, data: [{ yAxis: t.target }] },
     }],

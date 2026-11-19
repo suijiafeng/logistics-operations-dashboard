@@ -1,22 +1,22 @@
 /** DOM 与 Canvas 共用的设计变量；在应用挂载前安装对应 CSS 自定义属性。 */
-// 精密深色：中性锌灰分层，单一强调色（国际橙）只用于焦点、主操作和当前锚点。
-// 红 / 琥珀只用于真实告警与需要关注的状态，不拿来做装饰。
+// 深蓝身份色：海军蓝底、单一蓝强调色用于焦点、主系列和关键数字。
+// 红 / 琥珀 / 绿只用于真实告警与恢复，不拿来做装饰。
 export const COLORS = {
-  canvas: '#09090B', panel: '#18181B', header: '#18181B', elevated: '#27272A',
-  track: '#27272A', border: 'rgba(255, 255, 255, 0.08)', hover: 'rgba(255, 255, 255, 0.05)',
-  selected: 'rgba(255, 79, 0, 0.12)',
-  text: '#FAFAFA', heading: '#FAFAFA', secondary: '#A1A1AA', tertiary: '#71717A',
-  accent: '#FF4F00', accentText: '#FF8A4C', accentValue: '#FFC2A1', onAccent: '#18181B',
+  canvas: '#050B18', panel: '#0A1A33', header: '#0A1A33', elevated: '#102848',
+  track: '#16345C', border: 'rgba(120, 168, 255, 0.22)', hover: 'rgba(47, 128, 255, 0.10)',
+  selected: 'rgba(47, 128, 255, 0.16)',
+  text: '#E8F1FC', heading: '#F4F8FF', secondary: '#B7C9E2', tertiary: '#8AA4C4',
+  accent: '#2F80FF', accentText: '#7AABFF', accentValue: '#C5DBFF', onAccent: '#F7FBFF',
   success: '#6FBF90', warning: '#E6B325', danger: '#E5484D', dangerText: '#F5A8A4',
-  // 数据色阶：同一中性明度阶梯，不另开色相
-  barWeak: '#3F3F46', bar: '#71717A', barStrong: '#A1A1AA', barLight: '#D4D4D8',
-  vehicle: '#D4D4D8', dwell: '#A8A29E', muted: '#52525B', route: '#5C5C66',
-  cold: '#8FA39A',
-  infoBg: '#27272A', warningBg: '#3A3014', dangerBg: '#3F1D1D',
-  mapArea: '#141416', mapBorder: 'rgba(255, 255, 255, 0.12)', mapProvince: '#1F1F23', mapHover: '#2A2A2E',
-  overlay: 'rgba(9, 9, 11, 0.94)', hud: 'rgba(9, 9, 11, 0.92)',
-  legend: 'rgba(9, 9, 11, 0.92)', accentArea: 'rgba(255, 79, 0, 0.12)',
-  gridLine: 'rgba(255, 255, 255, 0.08)',
+  // 图表色阶：同一蓝色相，按明度区分
+  barWeak: '#14345C', bar: '#1E5BB8', barStrong: '#2F80FF', barLight: '#8EBAFF',
+  vehicle: '#8EBAFF', dwell: '#3D6FA8', muted: '#1E4E8C', route: '#245A96',
+  cold: '#5EB8C9',
+  infoBg: '#102848', warningBg: '#3A3014', dangerBg: '#3F1D1D',
+  mapArea: '#071428', mapBorder: 'rgba(126, 176, 240, 0.32)', mapProvince: '#0E2C56', mapHover: '#143866',
+  overlay: 'rgba(5, 11, 24, 0.94)', hud: 'rgba(5, 14, 32, 0.92)',
+  legend: 'rgba(5, 14, 32, 0.92)', accentArea: 'rgba(47, 128, 255, 0.16)',
+  gridLine: 'rgba(120, 168, 255, 0.14)',
 } as const
 
 export const FONT = {
