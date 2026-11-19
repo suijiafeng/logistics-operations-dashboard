@@ -5,6 +5,7 @@ import { provinceName } from '../data/provinces'
 import { statusOf, routeOf, indexOfPlate, type VehicleDetail } from '../services/vehicles'
 import { postAlertStatus } from '../services/alerts'
 import type { TrailPoint } from '../services/history'
+import { DEMO_WAYBILLS, linkedRouteName, waybillById } from '../data/deliveryTracks'
 
 export type LayerKey = 'routes' | 'enroute' | 'dwell' | 'anomaly' | 'hubs' | 'alerts' | 'cold'
 export const LAYER_KEYS: LayerKey[] = ['routes', 'enroute', 'dwell', 'anomaly', 'hubs', 'alerts', 'cold']
@@ -221,6 +222,10 @@ export const useDashboardStore = defineStore('dashboard', {
     /** 选中的干线下标：地图高亮该线并只突出线上车辆 */
     selectedRouteIndex: null as number | null,
     selectedPlate: null as string | null,
+    /** 监控是原有全国大屏；delivery 是配送轨迹。轨迹用演示样本，不依赖引擎快照 */
+    scene: 'monitor' as 'monitor' | 'delivery',
+    /** 当前演示运单。选中后按 routeIndex 高亮现有干线图和干线排行 */
+    selectedWaybillId: null as string | null,
     vehicle: null as VehicleDetail | null,
     vehicleError: '',
     /** 地图图层开关（持久化到 localStorage） */
@@ -351,6 +356,7 @@ export const useDashboardStore = defineStore('dashboard', {
     selectHub(id: string | null) {
       this.activeEvent = null
       this.selectVehicle(null)
+      this.selectedWaybillId = null
       if (id) this.selectedRouteIndex = null
       this.selectedHubId = id
       if (id && this.view !== 'china' && hubById[id]?.province !== this.view) {
@@ -361,7 +367,7 @@ export const useDashboardStore = defineStore('dashboard', {
     /** 选中车辆：清除网点与事件选择；详情由 VehicleDetail 轮询填充，尾迹由其拉取 */
     selectVehicle(plate: string | null) {
       if (plate === this.selectedPlate) return
-      if (plate) { this.selectedHubId = null; this.activeEvent = null; this.selectedRouteIndex = null }
+      if (plate) { this.selectedHubId = null; this.activeEvent = null; this.selectedRouteIndex = null; this.selectedWaybillId = null }
       this.selectedPlate = plate
       this.vehicle = null
       this.vehicleError = ''
@@ -397,7 +403,13 @@ export const useDashboardStore = defineStore('dashboard', {
     /** 选中干线：清除网点 / 车辆 / 事件选择；线路不在当前省内时回到全国 */
     selectRoute(index: number | null) {
       if (index !== null && (!Number.isInteger(index) || index < 0 || index >= ROUTES.length)) return
-      if (index !== null) { this.selectedHubId = null; this.activeEvent = null; this.selectVehicle(null) }
+      if (index !== null) {
+        this.selectedHubId = null
+        this.activeEvent = null
+        this.selectVehicle(null)
+        const waybill = this.selectedWaybillId ? waybillById(this.selectedWaybillId) : undefined
+        if (!waybill || waybill.routeIndex !== index) this.selectedWaybillId = null
+      }
       this.selectedRouteIndex = index
       if (index !== null && this.view !== 'china') {
         const [a, b] = ROUTES[index]!
@@ -422,6 +434,9 @@ export const useDashboardStore = defineStore('dashboard', {
         this.selectedRouteIndex = null
         this.selectVehicle(null)
         this.engineId = id
+        // 演示运单不属于引擎状态。重连把干线选择清掉之后，按仍选中的运单把高亮补回去
+        const waybill = waybillById(this.selectedWaybillId)
+        if (waybill) this.selectedRouteIndex = waybill.routeIndex
       }
     },
     mergeEvents(events: AnomalyEvent[]) {
@@ -461,6 +476,7 @@ export const useDashboardStore = defineStore('dashboard', {
       const toId = event.toId ?? this.hubs.find((hub) => hub.name === names[names.length - 1])?.id
       this.selectVehicle(null)
       this.selectedRouteIndex = null
+      this.selectedWaybillId = null
       this.activeEvent = { ...event, fromId, toId }
       // 同省事件下钻到该省；跨省事件保留全国地图，才能同时展示起终点和事件位置。
       const from = fromId ? hubById[fromId]?.province : undefined
@@ -469,9 +485,36 @@ export const useDashboardStore = defineStore('dashboard', {
       this.selectedHubId = toId ?? null
       this.notify(`已定位：${event.place} · ${this.viewName}视图`)
     },
-    clearSelection() { this.selectedHubId = null; this.activeEvent = null; this.selectedRouteIndex = null; this.selectVehicle(null) },
+    clearSelection() { this.selectedHubId = null; this.activeEvent = null; this.selectedRouteIndex = null; this.selectedWaybillId = null; this.selectVehicle(null) },
+    /** 选中演示运单，并让现有干线图 / 干线排行高亮它对应的线路。同一单重复点选不重置回放。 */
+    selectWaybill(id: string) {
+      const waybill = waybillById(id)
+      if (!waybill) return
+      if (this.selectedWaybillId === id) return
+      this.selectedWaybillId = id
+      this.selectedHubId = null
+      this.activeEvent = null
+      if (this.selectedPlate) this.selectVehicle(null)
+      this.selectedRouteIndex = waybill.routeIndex
+      if (this.view !== 'china') {
+        const pair = ROUTES[waybill.routeIndex]
+        const fromProvince = pair ? hubById[pair[0]]?.province : undefined
+        const toProvince = pair ? hubById[pair[1]]?.province : undefined
+        if (fromProvince !== this.view && toProvince !== this.view) this.setView('china')
+      }
+      if (this.scene !== 'delivery') this.notify(`已在干线地图高亮：${linkedRouteName(waybill.routeIndex)}`)
+      this.mapVersion++
+    },
+    openDelivery(id?: string | null) {
+      this.scene = 'delivery'
+      const requested = id && waybillById(id) ? id : null
+      const next = requested || this.selectedWaybillId || DEMO_WAYBILLS[0]?.id
+      if (next) this.selectWaybill(next)
+    },
+    closeDelivery() { this.scene = 'monitor' },
     escape() {
-      if (this.selectedHubId || this.activeEvent || this.selectedPlate || this.selectedRouteIndex !== null) this.clearSelection()
+      if (this.scene === 'delivery') { this.closeDelivery(); return }
+      if (this.selectedHubId || this.activeEvent || this.selectedPlate || this.selectedRouteIndex !== null || this.selectedWaybillId) this.clearSelection()
       else if (this.view !== 'china') this.setView('china')
     },
     setView(v: string) {
