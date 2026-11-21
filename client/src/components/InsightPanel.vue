@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import Panel from './Panel.vue'
-import OdSankey, { OD_TOP } from './OdSankey.vue'
+import OdSankey, { OD_TOP, OD_TOP_COMPACT } from './OdSankey.vue'
 import SafetyRank from './SafetyRank.vue'
 import ColdChain from './ColdChain.vue'
 import { useDashboardStore } from '../stores/dashboard'
@@ -18,13 +18,17 @@ const TABS = [
 ]
 type TabKey = 'od' | 'safety' | 'cold' | 'efficiency'
 const store = useDashboardStore()
+const compact = ref(false)
+let compactMedia: MediaQueryList | undefined
+const updateCompact = () => { compact.value = compactMedia?.matches ?? false }
+const odLimit = computed(() => compact.value ? OD_TOP_COMPACT : OD_TOP)
 const active = ref<TabKey>('od')
 const title = computed(() => TABS.find((t) => t.key === active.value)?.title ?? '')
 const extra = computed(() => {
   if (active.value === 'od') {
     const s = store.shipments
     if (!s) return '发出省 → 到达省'
-    const flows = s.od.slice(0, OD_TOP)
+    const flows = s.od.slice(0, odLimit.value)
     const inter = Math.max(0, s.odTotal - s.odIntra)
     const shown = flows.reduce((sum, f) => sum + f.value, 0)
     return `省际前 ${flows.length} 对 · 占省际 ${inter ? Math.round(shown / inter * 100) : 0}% · 省内另有 ${fmtCompact(s.odIntra)} 单`
@@ -42,13 +46,19 @@ const extra = computed(() => {
 })
 let timer: number | undefined
 onMounted(() => {
+  compactMedia = window.matchMedia('(max-width: 1440px), (max-height: 820px)')
+  updateCompact()
+  compactMedia.addEventListener('change', updateCompact)
   timer = window.setInterval(() => {
     if (!store.tourOn || store.tourPaused || document.hidden) return
     const i = TABS.findIndex((t) => t.key === active.value)
     active.value = TABS[(i + 1) % TABS.length]!.key as TabKey
   }, 10_000)
 })
-onBeforeUnmount(() => window.clearInterval(timer))
+onBeforeUnmount(() => {
+  window.clearInterval(timer)
+  compactMedia?.removeEventListener('change', updateCompact)
+})
 // 追踪冷链车时自动切到冷链页签，追踪扣分司机时切到安全页签（仅用户未在手动切换时）
 watch(() => store.selectedWaybillId, (id) => {
   if (id) active.value = 'efficiency'
@@ -62,7 +72,7 @@ watch(() => store.selectedPlate, (plate) => {
 
 <template>
   <Panel :title="title" :extra="extra" :tabs="TABS" :active="active" @update:active="active = $event as TabKey">
-    <OdSankey v-if="active === 'od'" />
+    <OdSankey v-if="active === 'od'" :limit="odLimit" />
     <SafetyRank v-else-if="active === 'safety'" />
     <ColdChain v-else-if="active === 'cold'" />
     <WaybillEfficiencyChart v-else />
@@ -71,5 +81,10 @@ watch(() => store.selectedPlate, (plate) => {
 
 <style scoped>
 /* 窄列里四个页签放不下时换行，不把「运输效率」挤出标题栏 */
-:deep(.tabs) { flex-wrap: wrap; max-width: 100%; }
+:deep(.tabs) { flex-wrap: wrap; min-width: 0; max-width: 100%; }
+@media (max-width: 1440px) {
+  :deep(.panel-head) { flex-wrap: wrap; }
+  :deep(.tabs) { flex: 0 0 100%; margin-left: 0; }
+  :deep(.extra) { margin-left: 0; }
+}
 </style>
