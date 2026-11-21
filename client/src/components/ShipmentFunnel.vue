@@ -37,7 +37,8 @@ const extra = computed(() => s.value
         <span class="conv" :title="i > 0 ? `由${stages[i - 1]!.name}到${st.name}的转化率` : '首段'">{{ i > 0 ? `${st.conv}%` : ' ' }}</span>
         <div class="tile" :title="`${st.name}：今日累计 ${fmtInt(st.total)} 单，占揽收 ${st.pct}%${st.last ? '' : `，当前在制 ${fmtInt(st.inStage)} 单`}`">
           <span class="name">{{ st.name }}</span>
-          <b class="value">{{ fmtCompact(st.total) }}</b>
+          <b class="value">{{ fmtInt(st.total) }}</b>
+          <b class="value value-compact">{{ fmtCompact(st.total, 10_000) }}</b>
           <span class="bar"><i :style="{ width: `${st.pct}%` }" /></span>
           <small>{{ st.last ? `占揽收 ${st.pct}%` : `在制 ${fmtCompact(st.inStage)}` }}</small>
         </div>
@@ -82,6 +83,11 @@ const extra = computed(() => s.value
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.value-compact { display: none; }
+@container (max-width: 72px) {
+  .value:not(.value-compact) { display: none; }
+  .value-compact { display: block; }
 }
 .bar { height: 3px; background: var(--color-track); border-radius: 2px; overflow: hidden; }
 .bar i { display: block; height: 100%; background: var(--color-barStrong); }

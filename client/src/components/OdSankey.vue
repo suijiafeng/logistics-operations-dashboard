@@ -1,6 +1,7 @@
 <script lang="ts">
 /** 桑基图取省际前 N 对；InsightPanel 的说明文字也用这个常量 */
 export const OD_TOP = 12
+export const OD_TOP_COMPACT = 8
 </script>
 
 <script setup lang="ts">
@@ -13,9 +14,10 @@ import { fmtCompact, fmtInt } from '../services/format'
 
 // 省际 OD 流向（面板正文，由 InsightPanel 的页签承载）：左列发出省、右列到达省，流量 = 今日由实体统计的运单数。
 // 省内流向（珠三角互发）远大于省际，引擎只给合计，不进图；同一省同时出现在两侧时用不同节点避免成环。
+const props = defineProps<{ limit: number }>()
 const store = useDashboardStore()
 const { el, chart } = useEcharts()
-const flows = computed(() => (store.shipments?.od ?? []).slice(0, OD_TOP))
+const flows = computed(() => (store.shipments?.od ?? []).slice(0, props.limit))
 
 function render() {
   const c = chart.value
@@ -40,7 +42,7 @@ function render() {
       type: 'sankey',
       left: 4, right: 4, top: 6, bottom: 6,
       nodeWidth: 10,
-      nodeGap: 6,
+      nodeGap: 10,
       nodeAlign: 'justify',
       draggable: false,
       layoutIterations: 32,
@@ -53,10 +55,10 @@ function render() {
         ...(n.side === 'in' ? { label: { position: 'left' } } : {}) })),
       links: list.map((f) => ({ source: `${f.from}>`, target: `>${f.to}`, value: f.value })),
     }],
-  }, { notMerge: false })
+  }, { replaceMerge: ['series'] })
 }
 
-watch([chart, () => store.chartVersion], render)
+watch([chart, () => store.chartVersion, () => props.limit], render)
 </script>
 
 <template>
